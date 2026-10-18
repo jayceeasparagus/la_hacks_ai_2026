@@ -4,6 +4,7 @@ import unittest
 from app.models import Track, TrackFrame
 from engine.engine import RuleEngine
 from engine.fake_tracks import SCENARIOS, scenario, synthetic_config
+from engine.replay import replay
 
 
 class TemporalEngineTests(unittest.TestCase):
@@ -26,6 +27,14 @@ class TemporalEngineTests(unittest.TestCase):
             _, new = engine.update(None, frame)
             alerts.extend(new)
         return alerts
+
+
+    def test_every_synthetic_scenario(self):
+        for name, (_, expected_times) in SCENARIOS.items():
+            with self.subTest(name=name):
+                alerts = replay(scenario(name))
+                self.assertEqual([round(alert.ts, 3) for alert in alerts], expected_times)
+                self.assertEqual(len({alert.id for alert in alerts}), len(alerts))
 
 
     def test_threshold_not_before_five_seconds(self):
@@ -60,6 +69,13 @@ class TemporalEngineTests(unittest.TestCase):
                 engine = self.engine()
                 self.run_frames(engine, [self.frame(tick / 10) for tick in range(41)])
                 self.assertEqual(len(engine.update(None, self.frame(4 + gap))[1]), expected)
+
+
+    def test_reentry_gets_new_incident_and_alert(self):
+        alerts = replay(scenario('reentry'))
+        self.assertEqual(len(alerts), 2)
+        self.assertNotEqual(alerts[0].incident_id, alerts[1].incident_id)
+        self.assertEqual(alerts[0].track_id, alerts[1].track_id)
 
 
     def test_simultaneous_overlapping_objects_do_not_merge(self):
@@ -137,6 +153,11 @@ class TemporalEngineTests(unittest.TestCase):
         engine.reset()
         second = self.run_frames(engine, frames)[0]
         self.assertNotEqual(first.id, second.id)
+
+
+    def test_replay_output_is_deterministic(self):
+        first = [alert.model_dump() for alert in replay(scenario('two_bags'))]
+        self.assertEqual(first, [alert.model_dump() for alert in replay(scenario('two_bags'))])
 
 
     def test_disabled_rules_and_configuration_copy(self):
