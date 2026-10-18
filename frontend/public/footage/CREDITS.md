@@ -6,6 +6,5 @@ Shown in black and white on the landing page monitors.
 | File | Pexels video |
 |---|---|
 | exit.mp4 | https://www.pexels.com/video/5971048/ (person walking on a white corridor) |
-| lobby.mp4 | https://www.pexels.com/video/7652286/ (coworkers walking in the lobby) |
 | entrance.mp4 | https://www.pexels.com/video/853874/ (black and white footage of a train station) |
 | dock.mp4 | https://www.pexels.com/video/6079421/ (person driving a forklift) |

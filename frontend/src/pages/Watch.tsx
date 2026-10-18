@@ -188,7 +188,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
 
         <aside className="flex w-[340px] shrink-0 flex-col gap-4">
           <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-[32px] font-semibold leading-none tracking-[-0.04em]">Noticed</h2>
+            <h2 className="font-display text-[32px] font-medium leading-none tracking-[-0.03em]">Noticed</h2>
             <span className="text-[14px] text-muted">{openCount ? `${openCount} need you` : 'All clear'}</span>
           </div>
           <div className="flex items-center gap-2">

@@ -16,8 +16,8 @@ export default {
         'accent-ink': '#060E1F',
       },
       fontFamily: {
-        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
-        display: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        sans: ['"Helvetica Now Display"', '"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
+        display: ['"Helvetica Now Display"', '"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'], // the stack Anduril's site uses
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
       letterSpacing: {

@@ -111,7 +111,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
       <main className="mx-auto grid max-w-[1320px] grid-cols-[minmax(0,1fr)_360px] gap-24 px-16 pb-24 pt-6">
         {/* the policy, written like a document */}
         <section className="rise flex flex-col">
-          <h1 className="font-display text-[56px] font-semibold leading-[1.05] tracking-[-0.045em]">
+          <h1 className="font-display text-[56px] font-medium leading-[1.05] tracking-[-0.03em]">
             What matters <span className="text-accent">here?</span>
           </h1>
 
@@ -138,7 +138,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
 
           {result && (
             <div className="mt-16 flex flex-col">
-              <h2 className="mb-2 font-display text-[22px] font-medium tracking-[-0.02em]">
+              <h2 className="mb-2 font-display text-[22px] font-medium tracking-[-0.03em]">
                 It will watch for {rules.length === 1 ? 'one thing' : `${rules.length} things`}
               </h2>
               <ul className="flex flex-col">
@@ -187,7 +187,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
         {/* cameras, beside the policy */}
         <aside className="rise flex flex-col gap-6 self-start pt-3" style={{ '--d': '120ms' } as React.CSSProperties}>
           <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-[22px] font-medium tracking-[-0.02em]">Cameras</h2>
+            <h2 className="font-display text-[22px] font-medium tracking-[-0.03em]">Cameras</h2>
             <span className="text-[14px] text-muted">
               {cameras.length} of {MAX_CAMERAS}
             </span>
@@ -198,7 +198,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
               <div key={cam.id} className="flex flex-col gap-2.5">
                 <button
                   onClick={() => setEditing(cam)}
-                  className="group relative aspect-video overflow-hidden rounded-[4px] bg-panel text-left"
+                  className="group relative aspect-video overflow-hidden bg-panel text-left"
                   aria-label={`Draw zones on ${cam.name}`}
                 >
                   <LiveVideo camera={cam} />

@@ -37,7 +37,7 @@ export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolvi
           <img
             src={snippet?.frames[snippet.detectAt] ?? alert.evidence_image!}
             alt=""
-            className="h-9 w-16 shrink-0 rounded-[3px] object-cover"
+            className="h-9 w-16 shrink-0 object-cover"
           />
         )}
         <span className="min-w-0 flex-1 truncate text-muted">{alert.title}</span>
@@ -59,10 +59,10 @@ export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolvi
     <article
       className={`relative flex shrink-0 flex-col gap-3 border-b border-line pb-5 transition duration-500 ${isNew ? 'card-in' : ''} ${resolving ? 'opacity-60' : ''}`}
     >
-      <div className={`relative rounded-[4px] ${isNew && urgent ? 'card-flash' : ''}`}>
+      <div className={`relative ${isNew && urgent ? 'card-flash' : ''}`}>
         <Evidence alert={alert} snippet={snippet} />
         {resolving && (
-          <div className="toast-in absolute inset-0 z-10 flex items-center justify-center rounded-[4px] bg-black/60">
+          <div className="toast-in absolute inset-0 z-10 flex items-center justify-center bg-black/60">
             <span className="flex items-center gap-2 text-[17px] font-medium text-[#F1EEE6]">
               <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
                 <path className="marker-draw" pathLength={1} d="M3 9.5 L7.5 14 L15 4.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -106,7 +106,7 @@ function Evidence({ alert, snippet }: { alert: Alert; snippet?: Props['snippet']
   const box = alert.bbox
   if (!snippet && !alert.evidence_clip && !alert.evidence_image) return null
   return (
-    <div className="relative aspect-video overflow-hidden rounded-[4px] bg-black">
+    <div className="relative aspect-video overflow-hidden bg-black">
       {snippet ? (
         <Snippet frames={snippet.frames} detectAt={snippet.detectAt} />
       ) : alert.evidence_clip ? (

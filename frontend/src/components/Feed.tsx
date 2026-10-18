@@ -53,7 +53,7 @@ export default function Feed({ camera, index, status, ruleStates = [], rules = [
   return (
     <div
       onClick={onClick}
-      className={`group relative aspect-video overflow-hidden rounded-md bg-panel ${onClick ? 'cursor-pointer transition duration-300 hover:-translate-y-0.5 hover:brightness-110' : ''}`}
+      className={`group relative aspect-video overflow-hidden bg-panel ${onClick ? 'cursor-pointer transition duration-300 hover:-translate-y-0.5 hover:brightness-110' : ''}`}
     >
       {!broken && <LiveVideo camera={camera} attempt={attempt} dimmed={offline} onError={() => setBroken(true)} />}
 

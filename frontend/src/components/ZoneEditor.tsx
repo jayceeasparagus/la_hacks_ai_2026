@@ -102,10 +102,10 @@ export default function ZoneEditor({ camera, zones: initial, onSave, onClose }: 
       <div className="flex w-full max-w-[1280px] gap-8" onClick={(e) => e.stopPropagation()}>
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-baseline justify-between">
-            <span className="font-display text-[22px] font-medium tracking-[-0.02em] text-text">Zones on {camera.name}</span>
+            <span className="font-display text-[22px] font-medium tracking-[-0.03em] text-text">Zones on {camera.name}</span>
             <span className="text-[14px] text-muted">Drag for a rectangle, or click points and close on the first one. Esc cancels.</span>
           </div>
-          <div className="relative aspect-video overflow-hidden rounded-md bg-panel">
+          <div className="relative aspect-video overflow-hidden bg-panel">
             <LiveVideo camera={camera} />
             <svg
               ref={surface}

@@ -15,7 +15,7 @@ body,
 body {
   background: #000;
   color: #ededed;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: 'Helvetica Now Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -165,6 +165,63 @@ body {
   height: 100%;
   background: linear-gradient(90deg, transparent, #2D4F96, transparent);
   animation: reading 1.1s ease-in-out infinite;
+}
+
+/* a faint band of light rolling down a monitor, like an old CCTV screen */
+@keyframes sweep {
+  from { translate: 0 -100%; }
+  to { translate: 0 500%; }
+}
+.scan-sweep {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 22%;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: sweep 7s linear var(--sweep-d, 0s) infinite;
+}
+
+/* REC indicator */
+@keyframes rec {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0.15; }
+}
+.rec-blink {
+  animation: rec 1.6s steps(1) var(--blink-d, 0s) infinite;
+}
+
+/* incident log scrolling left; the content is doubled so -50% loops seamlessly */
+@keyframes ticker {
+  from { translate: 0 0; }
+  to { translate: -50% 0; }
+}
+.ticker {
+  animation: ticker 48s linear infinite;
+}
+
+/* the landing monitor clicking on: a bright line snaps open into the picture */
+@keyframes crt-on {
+  0% { clip-path: inset(50% 0 50% 0); filter: brightness(4) saturate(0); }
+  35% { clip-path: inset(49.6% 0 49.6% 0); filter: brightness(4) saturate(0); }
+  70% { clip-path: inset(0 0 0 0); filter: brightness(1.6); }
+  100% { clip-path: inset(0 0 0 0); filter: brightness(1); }
+}
+.crt-on {
+  clip-path: inset(50% 0 50% 0);
+  animation: crt-on 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards;
+}
+
+/* a burst of static between channels */
+@keyframes static-cut {
+  0% { opacity: 0.9; transform: translateY(0); }
+  50% { opacity: 0.6; transform: translateY(-2%); }
+  100% { opacity: 0; transform: translateY(1%); }
+}
+.static-cut {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: screen;
+  animation: static-cut 0.16s steps(3) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
