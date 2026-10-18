@@ -7,6 +7,8 @@ import pytest
 
 from policy.capability import finalize
 from policy.contracts import Zone
+
+SQUARE = [(0.1, 0.1), (0.9, 0.1), (0.9, 0.9), (0.1, 0.9)]
 from policy.draft import DraftPolicy, DraftRule, build_draft_schema
 from policy.prompts import FEW_SHOTS
 from policy.synonyms import parse_duration
@@ -29,6 +31,14 @@ def test_person_removed_from_persistent_rule():
 def test_person_only_persistent_rule_is_dropped():
     result = finalize(draft(objects=["person"]), ZONES)
     assert result.rules == [] and "People can't" in result.warnings[0]
+
+
+def test_cameras_are_removed_from_persistent_rules():
+    """The Rule contract only allows bags and chairs in persistent rules."""
+    mixed = finalize(draft(objects=["camera", "chair"]), ZONES)
+    assert mixed.rules[0].objects == ["chair"] and any("Removed camera" in w for w in mixed.warnings)
+    only_camera = finalize(draft(objects=["camera"]), ZONES)
+    assert only_camera.rules == [] and "only watch bags and chairs" in only_camera.warnings[0]
 
 
 def test_attribute_not_allowed_for_object():
@@ -68,8 +78,8 @@ def test_duplicate_ids_get_suffixes_and_exact_duplicates_merge():
 
 
 def test_zone_name_on_two_cameras_warns():
-    zones = [Zone(id="entrance_a", name="Entrance", camera_id="cam_a", polygon=[]),
-             Zone(id="entrance_b", name="Entrance", camera_id="cam_b", polygon=[])]
+    zones = [Zone(id="entrance_a", name="Entrance", camera_id="cam_a", polygon=SQUARE),
+             Zone(id="entrance_b", name="Entrance", camera_id="cam_b", polygon=SQUARE)]
     result = finalize(draft(zone_id="entrance_a", source_text="no chairs at the entrance"), zones)
     assert any("more than one camera" in w for w in result.warnings)
 
@@ -96,7 +106,7 @@ def test_phone_warning_only_for_generic_camera_rules():
 
 @pytest.mark.parametrize("zones,policy,output", FEW_SHOTS)
 def test_few_shots_are_valid_and_pass_capability(zones, policy, output):
-    zone_models = [Zone(polygon=[], **z) for z in zones]
+    zone_models = [Zone(polygon=SQUARE, **z) for z in zones]
     result = finalize(DraftPolicy.model_validate(output), zone_models)
     assert len(result.rules) == len(output["rules"])
     assert len(result.unsupported) == len(output["unsupported"])

@@ -20,7 +20,7 @@ RULE TYPES:
       "only clear bags allowed"           -> transparent, attribute_expected = true
       "professional cameras need review"  -> professional, attribute_expected = false
   - persistent_object: alert when one of the objects stays in a zone longer than
-    duration_seconds. Never use "person" for this type.
+    duration_seconds. Only backpack, handbag, suitcase and chair; never person or camera.
 ZONES: the organizer has drawn these zones (id, name, camera). Use only these ids, or "UNKNOWN"
 if the policy does not clearly refer to one of them.
 
@@ -31,8 +31,7 @@ Rules for you:
 - Convert durations to seconds ("five seconds" -> 5, "half a minute" -> 30, "2 min" -> 120).
   If no duration is given, use null.
 - severity: "urgent" for safety (exits, fire lanes, blocking, emergencies), "review" for
-  approvals, checks and admission rules, "info" only if the organizer says just to log it.
-  Use null if unclear.
+  approvals, checks, admission rules and anything else. Use null if unclear.
 - If something CANNOT be observed with the objects and attributes above (concealed items,
   weapons, identity, staff vs guests, age, gender, intent, behavior, sound, crowd counts),
   do NOT invent a rule. Add one short honest sentence to "unsupported" that starts with

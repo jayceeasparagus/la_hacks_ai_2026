@@ -5,12 +5,14 @@ import json
 from policy import cache, llm
 from policy.compiler import compile_policy, compile_policy_with_info
 from policy.contracts import Zone
+
+SQUARE = [(0.1, 0.1), (0.9, 0.1), (0.9, 0.9), (0.1, 0.9)]
 from policy.synonyms import parse_duration
 from policy.tests.test_compiler import ZONES
 
 
 def zone(zone_id, name, camera="cam_1"):
-    return Zone(id=zone_id, name=name, camera_id=camera, polygon=[])
+    return Zone(id=zone_id, name=name, camera_id=camera, polygon=SQUARE)
 
 
 def summary(result):

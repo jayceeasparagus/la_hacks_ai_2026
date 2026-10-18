@@ -11,9 +11,17 @@ normalize the prompt (2,000 char cap) -> cache -> Gemini (`llm.py`, schema from 
 fallback answers both pass through `capability.py`, which is the real safety net.
 
 ## Contracts
-`contracts.py` imports from `app.models` when that module exists. Until then it uses a TEMPORARY copy
-of the models from the Person 2 briefing. Once Person 4's `backend/app/models.py` is on main, delete
-the copy and check for field differences. Never change the contracts from here.
+`contracts.py` imports from `app.models` when that module exists. Until then it uses a TEMPORARY
+mirror of the approved models on `origin/person4-integration`. Delete the mirror after the merge.
+Never change the contracts from here. The approved contract differs from the original briefing:
+- `SUPPORTED_ATTRIBUTES` maps object -> attributes (`{"backpack": ("transparent",)}`). Use
+  `synonyms.objects_with_attribute()` and `synonyms.attribute_names()`, never index it by attribute.
+- Severity is only `review` or `urgent` (no `info`).
+- `Rule` validates itself: ids and names can't be empty, persistent rules allow only bags and chairs
+  with no attribute, and attribute rules need every object to support the attribute. Zones need at
+  least 3 polygon points, and every model rejects unknown fields.
+- To check compatibility, put their `app/models.py` on `PYTHONPATH` and run the tests. On
+  2026-10-17 all tests passed, and the demo compile matched `contracts/examples.json` exactly.
 
 ## Gemini SDK (google-genai 2.31.0, Interactions API; checked against the installed source)
 - `client.interactions.create(model=..., input=str | [parts], system_instruction=str,
@@ -46,8 +54,10 @@ Dependencies: google-genai, pydantic, python-dotenv, opencv-python, numpy, pytes
   compiles go straight to the fallback and verifications return "verification unavailable".
   `llm.status()` reports the mode, the models, whether a key is set and whether Gemini is paused,
   for a health endpoint.
-- Person down (stretch) is off until `app.models.SUPPORTED_ATTRIBUTES["lying_down"] == ["person"]` and
-  `Attribute.name` accepts `"lying_down"`. While it's off, those requests go to `unsupported`.
+- Person down (stretch) is off until `"lying_down" in app.models.SUPPORTED_ATTRIBUTES["person"]`,
+  `Attribute.name` accepts `"lying_down"`, and the Rule validator allows that attribute on a
+  persistent person rule. The approved contract says person down stays unsupported for the MVP, so
+  for now those requests go to `unsupported`.
 
 ## Open proposals for Person 4 (contract changes need their sign-off)
 1. Add `description: str` to `Rule`, filled from `describe.describe_rule()` ("Bag is probably opaque").

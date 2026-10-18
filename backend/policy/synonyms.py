@@ -5,6 +5,18 @@ import re
 from policy.contracts import SUPPORTED_ATTRIBUTES, SUPPORTED_OBJECTS, Zone
 
 BAGS = ["backpack", "handbag", "suitcase"]
+# What a persistent_object rule may contain (mirrors the Rule validator in app/models.py).
+PERSISTENT_OBJECTS = BAGS + ["chair"]
+
+
+def objects_with_attribute(attribute: str) -> list[str]:
+    """Objects the attribute can be checked on. SUPPORTED_ATTRIBUTES maps object -> attributes."""
+    return [obj for obj, attributes in SUPPORTED_ATTRIBUTES.items() if attribute in attributes]
+
+
+def attribute_names() -> list[str]:
+    """Every attribute the contracts support, in first-seen order."""
+    return list(dict.fromkeys(a for attributes in SUPPORTED_ATTRIBUTES.values() for a in attributes))
 
 OBJECT_SYNONYMS = {
     "bag": BAGS, "bags": BAGS,
@@ -137,7 +149,7 @@ PERSON_DOWN_UNSUPPORTED = (
 
 def person_down_enabled() -> bool:
     """True once the shared contracts support the lying_down attribute on person."""
-    return "person" in SUPPORTED_ATTRIBUTES.get("lying_down", [])
+    return "lying_down" in SUPPORTED_ATTRIBUTES.get("person", ())
 
 
 # --- unsupported requests ---------------------------------------------------------------

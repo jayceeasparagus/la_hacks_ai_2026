@@ -4,10 +4,11 @@ import json
 from typing import Literal
 
 import pytest
+from pydantic import model_validator
 
-from policy import capability, contracts, llm
+from policy import capability, compiler, contracts, llm
 from policy.compiler import compile_policy
-from policy.contracts import Attribute
+from policy.contracts import Attribute, CompileResult, Rule
 from policy.describe import describe_rule
 from policy.draft import build_draft_schema
 from policy.prompts import build_system_prompt
@@ -17,15 +18,34 @@ from policy.tests.test_compiler import ZONES
 PROMPT = "Alert if someone is on the floor at the main entrance for more than 10 seconds."
 
 
+class ExtendedAttribute(Attribute):
+    name: Literal["transparent", "professional", "lying_down"]
+
+
+class ExtendedRule(Rule):
+    """The future contract: a persistent rule on person may carry the lying_down attribute."""
+
+    attribute: ExtendedAttribute | None = None
+
+    @model_validator(mode="after")
+    def check_rule(self):
+        if self.attribute is not None and self.attribute.name == "lying_down":
+            return self
+        return Rule.check_rule(self)
+
+
+class ExtendedCompileResult(CompileResult):
+    rules: list[ExtendedRule] = []
+
+
 @pytest.fixture
 def enabled(monkeypatch):
     """Simulate Person 4's contract change: lying_down allowed on person."""
-
-    class ExtendedAttribute(Attribute):
-        name: Literal["transparent", "professional", "lying_down"]
-
-    monkeypatch.setitem(contracts.SUPPORTED_ATTRIBUTES, "lying_down", ["person"])
+    monkeypatch.setitem(contracts.SUPPORTED_ATTRIBUTES, "person", ("lying_down",))
     monkeypatch.setattr(capability, "Attribute", ExtendedAttribute)
+    monkeypatch.setattr(capability, "Rule", ExtendedRule)
+    monkeypatch.setattr(capability, "CompileResult", ExtendedCompileResult)
+    monkeypatch.setattr(compiler, "CompileResult", ExtendedCompileResult)
 
 
 def attribute_enum() -> list[str]:

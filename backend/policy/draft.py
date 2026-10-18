@@ -5,7 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from policy.contracts import SUPPORTED_ATTRIBUTES, Zone
+from policy.contracts import Zone
+from policy.synonyms import attribute_names
 
 UNKNOWN_ZONE = "UNKNOWN"
 
@@ -27,8 +28,8 @@ class DraftRule(BaseModel):
         description="The compliant value of the attribute; a violation is when the observed value differs"
     )
     duration_seconds: float | None = Field(description="Time in seconds, or null if the policy gives none")
-    severity: Literal["info", "review", "urgent"] | None = Field(
-        description="urgent for safety, review for approvals and checks, info to just log; null if unclear"
+    severity: Literal["review", "urgent"] | None = Field(
+        description="urgent for safety, review for approvals, checks and anything else; null if unclear"
     )
 
 
@@ -46,9 +47,10 @@ def build_draft_schema(zones: list[Zone]) -> dict:
     properties = schema["properties"]["rules"]["items"]["properties"]
     properties["zone_id"]["enum"] = [z.id for z in zones] + [UNKNOWN_ZONE]
     # Offer only the attributes the shared contracts support (lying_down is a stretch goal).
+    supported = attribute_names()
     for option in properties["attribute_name"]["anyOf"]:
         if "enum" in option:
-            option["enum"] = [name for name in option["enum"] if name in SUPPORTED_ATTRIBUTES]
+            option["enum"] = [name for name in option["enum"] if name in supported]
     return schema
 
 

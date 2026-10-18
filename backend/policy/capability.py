@@ -4,11 +4,11 @@ a CompileResult. Runs on every Gemini answer and on every fallback result."""
 import math
 import re
 
-from policy.contracts import SUPPORTED_ATTRIBUTES, Attribute, CompileResult, Rule, Zone
+from policy.contracts import Attribute, CompileResult, Rule, Zone
 from policy.draft import DraftPolicy, DraftRule
 from policy.synonyms import (
-    BAGS, GENERIC_UNSUPPORTED, PERSON_DOWN, PERSON_DOWN_UNSUPPORTED, classify_unsupported, default_severity,
-    normalize_objects, person_down_enabled, zones_named_in,
+    BAGS, GENERIC_UNSUPPORTED, PERSISTENT_OBJECTS, PERSON_DOWN, PERSON_DOWN_UNSUPPORTED, classify_unsupported,
+    default_severity, normalize_objects, objects_with_attribute, person_down_enabled, zones_named_in,
 )
 
 MIN_DURATION_S = 0.5
@@ -67,14 +67,17 @@ def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str],
     attribute = None
     if rule_type == "object_attribute":
         if d.attribute_name is None:
-            if [o for o in objects if o != "person"]:
+            if [o for o in objects if o in PERSISTENT_OBJECTS]:
                 rule_type = "persistent_object"
                 warnings.append(f"Treated {quote} as a 'stays too long' rule because there's no attribute I can check.")
             else:
                 warnings.append(f"I couldn't find anything I can check in {quote}, so I skipped it.")
                 return None, False
         else:
-            allowed = SUPPORTED_ATTRIBUTES[d.attribute_name]
+            allowed = objects_with_attribute(d.attribute_name)
+            if not allowed:
+                warnings.append(f"I can't check '{d.attribute_name}' yet, so I skipped {quote}.")
+                return None, False
             bad = [o for o in objects if o not in allowed]
             objects = [o for o in objects if o in allowed]
             if not objects:
@@ -90,11 +93,18 @@ def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str],
                 warnings.append(f"I can only spot larger, professional-style cameras; phones and small cameras won't trigger {quote}.")
 
     if rule_type == "persistent_object":
-        objects = [o for o in objects if o != "person"]
+        had_people = "person" in objects
+        others = [o for o in objects if o not in PERSISTENT_OBJECTS and o != "person"]
+        objects = [o for o in objects if o in PERSISTENT_OBJECTS]
+        if others and objects:
+            warnings.append(f"Removed {', '.join(others)} from {quote}: 'stays too long' rules only watch bags and chairs.")
         if not objects:
-            warnings.append(
-                f"People can't be used in a 'stays too long' rule, because anyone walking through would alert. Skipped {quote}."
-            )
+            if had_people:
+                warnings.append(
+                    f"People can't be used in a 'stays too long' rule, because anyone walking through would alert. Skipped {quote}."
+                )
+            else:
+                warnings.append(f"'Stays too long' rules only watch bags and chairs, so I skipped {quote}.")
             return None, False
 
     if not objects:
@@ -108,8 +118,9 @@ def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str],
     duration, defaulted = _duration(d.duration_seconds, rule_type, quote, warnings)
     severity = d.severity or default_severity(source)
 
+    # id and name are filled in by _assign_ids_and_names once all rules are known.
     rule = Rule(
-        id="", name="", type=rule_type, objects=objects, zone=zone.id, attribute=attribute,
+        id="pending", name="pending", type=rule_type, objects=objects, zone=zone.id, attribute=attribute,
         duration_seconds=duration, severity=severity,
     )
     return rule, defaulted
@@ -127,7 +138,7 @@ def _person_down_rule(d: DraftRule, source: str, quote: str, zones: list[Zone], 
         return None, False
     duration, defaulted = _duration(d.duration_seconds, "persistent_object", quote, warnings)
     rule = Rule(
-        id="", name="", type="persistent_object", objects=["person"], zone=zone.id,
+        id="pending", name="pending", type="persistent_object", objects=["person"], zone=zone.id,
         attribute=Attribute(name="lying_down", expected=False), duration_seconds=duration,
         severity=d.severity or "urgent",
     )
