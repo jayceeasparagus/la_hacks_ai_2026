@@ -4,8 +4,12 @@ import argparse
 import json
 import logging
 from pathlib import Path
-import resource
 import sys
+
+try:
+    import resource  # Unix only
+except ImportError:
+    resource = None
 import threading
 import time
 from uuid import uuid4
@@ -20,6 +24,38 @@ from app.demo import demo_cameras, demo_rules, demo_zones
 from app.models import Track, TrackFrame
 from engine.evidence import FrameBuffer
 from engine.verification import StubVerifier
+
+
+def max_rss_raw():
+    """Peak memory of this process in the platform's raw unit, or None if unavailable.
+
+    Unix: ru_maxrss (KiB on Linux, bytes on macOS). Windows: peak working set in bytes,
+    read through the standard psapi call so no extra dependency is needed.
+    """
+    if resource is not None:
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class Counters(ctypes.Structure):
+            _fields_ = [('cb', wintypes.DWORD), ('PageFaultCount', wintypes.DWORD),
+                        ('PeakWorkingSetSize', ctypes.c_size_t), ('WorkingSetSize', ctypes.c_size_t),
+                        ('QuotaPeakPagedPoolUsage', ctypes.c_size_t), ('QuotaPagedPoolUsage', ctypes.c_size_t),
+                        ('QuotaPeakNonPagedPoolUsage', ctypes.c_size_t), ('QuotaNonPagedPoolUsage', ctypes.c_size_t),
+                        ('PagefileUsage', ctypes.c_size_t), ('PeakPagefileUsage', ctypes.c_size_t)]
+
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        # Declare types: an untyped call passes the process handle as a 32-bit int and fails.
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel32.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+        kernel32.K32GetProcessMemoryInfo.restype = wintypes.BOOL
+        counters = Counters(cb=ctypes.sizeof(Counters))
+        if kernel32.K32GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+            return counters.PeakWorkingSetSize
+    except (AttributeError, OSError):
+        pass
+    return None
 
 
 class SoakPipeline:
@@ -113,7 +149,7 @@ def run(seconds=300, output=None):
                     messages=messages, alerts=result['total'], reviewed=len(rows),
                     evidence_ready=sum(alert['evidence_status'] == 'ready' for alert in rows),
                     min_threads=min(threads), max_threads=max(threads),
-                    max_rss_raw=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+                    max_rss_raw=max_rss_raw())
     except Exception as exc:
         report.update(error=type(exc).__name__, elapsed_seconds=time.monotonic() - started)
         raise
