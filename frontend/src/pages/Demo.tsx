@@ -1,17 +1,16 @@
 // Demo: type a policy and watch it apply to the example cameras at once. The sentence compiles
 // to rules, the rules go live on every camera (PUT /api/policy swaps them in while monitoring),
-// and the backend's annotated streams show each person with their gear checks. Alerts arrive
-// on the right for a person to confirm or dismiss. Run the backend with the site safety scene:
+// and the backend's annotated streams show each person with their gear checks. Alerts still go
+// to the review queue (the Watch page); this page only shows the cameras. Run the backend with:
 //   POLICYLENS_SCENE=../demo/scenes/site_safety.json uvicorn app.main:app --port 8000
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Page } from '../App'
-import { api, createdSeconds } from '../api'
-import AlertCard from '../components/AlertCard'
+import { api } from '../api'
 import Feed from '../components/Feed'
 import Wordmark from '../components/Wordmark'
 import { objectsLabel } from '../format'
 import { ruleCondition } from '../rules'
-import type { Alert, Camera, CompileResult, Decision, Rule, RuleState, Zone } from '../types'
+import type { Camera, CompileResult, Rule, RuleState, Zone } from '../types'
 import { useLive } from '../useLive'
 
 const EXAMPLES = [
@@ -55,9 +54,6 @@ export default function Demo({ go }: { go: (p: Page) => void }) {
   const [result, setResult] = useState<CompileResult | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
-  const [alerts, setAlerts] = useState<Alert[]>([])
-  const [fresh, setFresh] = useState<Set<string>>(new Set())
-  const [resolving, setResolving] = useState<Record<string, Decision>>({})
   const [streamEpoch, setStreamEpoch] = useState(0)
 
   // The cameras play on a loop, so monitoring starts as soon as the page opens, and again
@@ -76,23 +72,11 @@ export default function Demo({ go }: { go: (p: Page) => void }) {
         return api.startMonitor()
       })
       .catch((e) => setError(`Can't reach the backend on :8000. ${(e as Error).message}`))
-    api.getAlerts().then(setAlerts).catch(() => {})
   }, [])
 
   useEffect(load, [load])
 
-  const onAlert = useCallback((incoming: Alert, isUpdate: boolean) => {
-    setAlerts((prev) => [incoming, ...prev.filter((a) => a.id !== incoming.id)])
-    if (isUpdate) return
-    setFresh((f) => new Set(f).add(incoming.id))
-    window.setTimeout(() => setFresh((f) => {
-      const next = new Set(f)
-      next.delete(incoming.id)
-      return next
-    }), 3000)
-  }, [])
-
-  const live = useLive(onAlert, load)
+  const live = useLive(() => {}, load)
 
   // The MJPEG stream only exists while monitoring: reconnect the feeds whenever it (re)starts.
   useEffect(() => {
@@ -129,27 +113,11 @@ export default function Demo({ go }: { go: (p: Page) => void }) {
     }
   }
 
-  const decide = async (id: string, decision: Decision) => {
-    setResolving((r) => ({ ...r, [id]: decision }))
-    try {
-      const updated = await api.decide(id, decision)
-      await new Promise((r) => window.setTimeout(r, 900))
-      setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)))
-    } finally {
-      setResolving(({ [id]: _, ...rest }) => rest)
-    }
-  }
-
   const cameraName = (id: string) => cameras.find((c) => c.id === id)?.name ?? id
   const cameraOfZone = (zoneId: string) => zones.find((z) => z.id === zoneId)?.camera_id ?? ''
   const groups = useMemo(() => groupRules(rules), [rules])
   const onlineCount = cameras.filter((c) => live.cameras[c.id]?.status === 'online').length
 
-  // Alerts from these cameras only (the store may hold alerts from other scenes); open ones first.
-  const shown = alerts
-    .filter((a) => cameras.some((c) => c.id === a.camera_id))
-    .sort((a, b) => Number(b.status === 'open') - Number(a.status === 'open') || createdSeconds(b) - createdSeconds(a))
-  const openCount = shown.filter((a) => a.status === 'open').length
 
   return (
     <div className="flex min-h-full flex-col bg-ink lg:h-full">
@@ -160,7 +128,7 @@ export default function Demo({ go }: { go: (p: Page) => void }) {
         </span>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-8 px-4 pb-8 sm:px-8 lg:grid-cols-[360px_minmax(0,1fr)_320px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-8 px-4 pb-8 sm:px-8 lg:grid-cols-[380px_minmax(0,1fr)]">
         {/* The policy: one sentence in, rule cards out. */}
         <section className="flex min-h-0 flex-col gap-6 lg:overflow-y-auto">
           <form
@@ -267,30 +235,6 @@ export default function Demo({ go }: { go: (p: Page) => void }) {
           ))}
         </section>
 
-        {/* What the cameras noticed: a person decides every alert. */}
-        <aside className="flex min-h-0 flex-col gap-4">
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-[28px] font-semibold leading-none tracking-[-0.04em]">Noticed</h2>
-            <span className="text-[14px] text-muted">{openCount ? `${openCount} need you` : 'All clear'}</span>
-          </div>
-          <div className="-m-3 flex min-h-0 flex-1 flex-col gap-5 p-3 lg:overflow-y-auto">
-            {shown.length === 0 && (
-              <p className="pt-1 text-[15px] leading-6 text-muted">
-                Missing gear shows up here with a picture of the moment, for you to confirm or dismiss.
-              </p>
-            )}
-            {shown.map((a) => (
-              <AlertCard
-                key={a.id}
-                alert={a}
-                cameraName={cameraName(a.camera_id)}
-                isNew={fresh.has(a.id)}
-                resolving={resolving[a.id] ?? null}
-                onDecide={(d) => decide(a.id, d)}
-              />
-            ))}
-          </div>
-        </aside>
       </div>
     </div>
   )
