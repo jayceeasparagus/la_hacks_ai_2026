@@ -348,6 +348,10 @@ class VisionSource:
             self._pipeline.stop()
             return
         yield from self._pipeline.frames()
+        # A clip that played to the end stays offline (the worker drains pending checks and stops)
+        # instead of being rebuilt and replayed, which re-alerted and dropped in-flight verdicts.
+        # Live cameras never report 'ended', so a dropped webcam or stream still reconnects.
+        self.ended = self._pipeline.status == 'ended'
 
     def recent_frames(self, seconds: float) -> list[tuple[float, np.ndarray]]:
         return self._pipeline.recent_frames(seconds) if self._pipeline is not None else []

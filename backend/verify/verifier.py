@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import logging
+import os
 import threading
 import time
 from collections import OrderedDict
@@ -20,13 +21,25 @@ from verify.prompts import QUESTIONS
 
 log = logging.getLogger("policylens.verify")
 
+
+def timeout_s() -> float:
+    """POLICYLENS_VERIFY_TIMEOUT_S if set to a positive number, else TIMEOUT_S. Read per call."""
+    try:
+        value = float(os.getenv("POLICYLENS_VERIFY_TIMEOUT_S", ""))
+    except ValueError:
+        return TIMEOUT_S
+    return value if value > 0 else TIMEOUT_S
+
 Check = Literal["transparent_bag", "professional_camera", "hard_hat", "safety_vest", "person_down"]
 
 MIN_SIDE_PX = 40
 MAX_SIDE_PX = 512
 JPEG_QUALITY = 85
 CONFIDENCE_THRESHOLD = 0.55  # below this a yes/no becomes "unclear"; tuned with verify.eval
-TIMEOUT_S = 4.0              # total budget per call, including waiting for the rate limiter
+# Total budget per call, including waiting for the rate limiter. Measured on Vertex gemini-2.5-flash
+# (2026-10-18): ~12 s for a call on a new or idle connection, <1 s back to back, so 4 s timed out every
+# real check. Override with POLICYLENS_VERIFY_TIMEOUT_S; the engine queue reads the same setting.
+TIMEOUT_S = 20.0
 BUSY_WAIT_S = 1.0
 CACHE_SIZE = 256
 MAX_REASON_WORDS = 15
@@ -75,7 +88,7 @@ def _verify(crop, check, started) -> tuple[Verdict, VisionAnswer | None, bool]:
             return Verdict(answer=None, confidence=0, reason="verification unavailable"), None, False
         if not ratelimit.LIMITER.acquire(BUSY_WAIT_S):
             return Verdict(answer=None, confidence=0, reason="verification busy"), None, False
-        remaining = max(0.1, TIMEOUT_S - (time.monotonic() - started))
+        remaining = max(0.1, timeout_s() - (time.monotonic() - started))
         contents = [
             {"type": "text", "text": QUESTIONS[check]},
             {"type": "image", "data": base64.b64encode(jpeg).decode(), "mime_type": "image/jpeg"},

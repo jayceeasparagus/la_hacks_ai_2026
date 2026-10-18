@@ -1,6 +1,7 @@
 """compile_policy(): plain-English policy -> validated CompileResult. Orchestration only."""
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 
@@ -11,8 +12,18 @@ from policy.draft import DraftPolicy, build_draft_schema
 log = logging.getLogger("policylens.policy")
 
 MAX_PROMPT_CHARS = 2000
-TOTAL_TIMEOUT_S = 12.0
+# Total compile budget (both attempts). Measured on Vertex gemini-2.5-flash: ~12 s per cold call, so 12 s
+# fell back offline about half the time. Override with POLICYLENS_COMPILE_TIMEOUT_S.
+TOTAL_TIMEOUT_S = 30.0
 MIN_ATTEMPT_S = 1.0
+
+
+def _total_timeout() -> float:
+    try:
+        value = float(os.getenv("POLICYLENS_COMPILE_TIMEOUT_S", ""))
+    except ValueError:
+        return TOTAL_TIMEOUT_S
+    return value if value > 0 else TOTAL_TIMEOUT_S
 
 EMPTY_WARNING = "Type a policy first, for example: 'Keep the emergency exit clear for more than 5 seconds.'"
 TOO_LONG_WARNING = f"That policy is long; I only read the first {MAX_PROMPT_CHARS} characters."
@@ -68,7 +79,7 @@ def _compile(prompt: str, zones: list[Zone], model: str, started: float) -> tupl
         return _finish(cached, notes), "cache"
 
     try:
-        draft = _ask_gemini(text, zones, model, deadline=started + TOTAL_TIMEOUT_S)
+        draft = _ask_gemini(text, zones, model, deadline=started + _total_timeout())
         result = capability.finalize(draft, zones)
     except Exception as exc:
         log.warning("Using the deterministic fallback because Gemini compile failed: %s", exc)

@@ -4,6 +4,7 @@ from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 import logging
+import os
 import threading
 import time
 from typing import Callable
@@ -13,6 +14,17 @@ from pydantic import ValidationError
 from app.models import Verdict
 
 log = logging.getLogger('policylens.engine.verification')
+DEFAULT_VERIFY_TIMEOUT_S = 20.0  # matches verify.verifier.TIMEOUT_S; real Gemini checks take ~12 s when cold
+QUEUE_MARGIN_S = 1.0             # the queue outlasts the verifier so its own 'timed out' verdict comes through
+
+
+def default_timeout() -> float:
+    """Queue timeout: POLICYLENS_VERIFY_TIMEOUT_S (or 20 s) plus a 1 s margin. Read when a scheduler is built."""
+    try:
+        value = float(os.getenv('POLICYLENS_VERIFY_TIMEOUT_S', ''))
+    except ValueError:
+        value = 0
+    return (value if value > 0 else DEFAULT_VERIFY_TIMEOUT_S) + QUEUE_MARGIN_S
 VerificationKey = tuple[str, str, str, int | str]  # camera, session, check, incident or original track ID
 
 
@@ -55,11 +67,13 @@ class VerificationScheduler:
     """
 
     def __init__(self, verifier: Callable | None = None, *, max_workers=2,
-                 max_pending=8, calls_per_second=2, timeout_seconds=4, cache_size=256):
+                 max_pending=8, calls_per_second=2, timeout_seconds=None, cache_size=256):
         if min(max_workers, max_pending, cache_size) < 1:
             raise ValueError('Worker, pending and cache sizes must be positive')
         if not 0 < calls_per_second <= 2:
             raise ValueError('Verification rate must be positive and at most 2 calls/s')
+        if timeout_seconds is None:
+            timeout_seconds = default_timeout()
         if timeout_seconds <= 0:
             raise ValueError('Verification timeout must be positive')
         self.verifier = verifier if verifier is not None else StubVerifier()

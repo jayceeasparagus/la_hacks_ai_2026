@@ -7,8 +7,8 @@
 the person is down). `None` means unclear, which leads to a manual-review alert.
 
 ## Guarantees
-- Never raises and never retries. The total budget is about 4 s, including up to 1 s waiting for the
-  rate limiter.
+- Never raises and never retries. The total budget is 20 s by default (`POLICYLENS_VERIFY_TIMEOUT_S`),
+  including up to 1 s waiting for the rate limiter. Real Vertex calls take ~12 s when cold, so 4 s timed out.
 - Fixed reasons when there's no model answer: "object too small to judge" (a side under 40 px),
   "verification busy" (limiter full), "verification timed out", "verification unavailable" (an error,
   bad JSON, or Gemini paused by the breaker in `policy/llm.py`).

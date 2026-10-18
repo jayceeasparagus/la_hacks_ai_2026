@@ -14,14 +14,14 @@ user-defined policies, deterministic temporal rules and operator decisions.
   compile cache, and a Gemini circuit breaker.
 - **Crop verifier** (`backend/verify/`, Person 2):
   - checks: clear bag, professional camera, hard hat, hi-vis vest
-  - 4 s budget, never raises, shared rate limit
+  - 20 s budget (`POLICYLENS_VERIFY_TIMEOUT_S`), never raises, shared rate limit
 - **Temporal engine** (`backend/engine/`):
   - "stays too long" rules: duration thresholds, one alert per incident, 1 s
     detection grace, 2 s closure, conservative tracking-ID recovery
   - attribute rules: one verification per incident on the best crop, then a
     violation, compliant or manual-review result
   - one shared bounded verification queue: 2 workers, 8 pending jobs, 2 starts/s,
-    4 s timeout; reconnects invalidate old-session results
+    21 s timeout (verifier budget + 1 s); reconnects invalidate old-session results
 - **Server** (`backend/app/main.py`): every route and WebSocket message in
   `contracts/api.md`.
   - one worker thread per camera (max 3)
@@ -34,9 +34,9 @@ user-defined policies, deterministic temporal rules and operator decisions.
     reconnect with code 1013 if their queue would lose an alert
 - **Camera sources:**
   - `synthetic:<scene>` and `replay:<tracks.jsonl>` work out of the box.
-  - `webcam:N`, `url:...` and `clip:...` use Person 1's vision pipeline. Until
-    `person1/vision` is merged and its detector stack installed, they show
-    `offline` with an explanation.
+  - `webcam:N`, `url:...` and `clip:...` use Person 1's vision pipeline (`backend/vision/`).
+    Without its detector stack installed they show `offline` with an explanation. A `clip:`
+    camera stays offline ("clip ended") once the clip finishes; pending checks finish first.
 - **Eval** (`eval/run_eval.py`): correct, false, missed and duplicate alerts, plus
   latency per labeled case. `eval/recorded_eval.py` additionally checks 20 saved-video
   cases with explicitly canned verdicts and reports execution errors.
@@ -133,7 +133,8 @@ python -B -m app.export_contracts ../contracts
 | Synthetic live server | 10 fps per camera; 15–47 ms from frame to stored alert | server log |
 | Recorded synthetic video | 20/20 cases, 17 matched alerts, 0 false/missed/duplicate | `eval/recorded_eval.py` |
 | Real clips: detection, false alerts, latency | **not measured yet**, no footage recorded | — |
-| Gemini compile latency and verifier accuracy | **not measured yet**, no API key | `verify.eval` once crops exist |
+| Gemini latency (Vertex `gemini-2.5-flash`) | ~12 s per call on a new or idle connection, <1 s back to back; budgets: compile 30 s, verify 20 s | E2E test, 2026-10-18 |
+| Verifier accuracy | **not measured yet** (1 real E2E check: opaque bag correctly flagged) | `verify.eval` once crops exist |
 
 ## Architecture
 
