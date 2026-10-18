@@ -72,6 +72,13 @@ class TemporalEngineTests(unittest.TestCase):
         self.assertEqual(engine.update(None, self.frame(8.1, empty=True)), ([], []))
 
 
+    def test_confidence_is_mean_of_observed_detections(self):
+        engine = self.engine()
+        alerts = self.run_frames(engine, [self.frame(tick / 10, confidence=0.8 if tick < 50 else 1)
+                                           for tick in range(51)])
+        self.assertAlmostEqual(alerts[0].confidence, (50 * 0.8 + 1) / 51)
+
+
     def test_wrong_camera_and_rewind_do_not_mutate_state(self):
         engine = self.engine()
         engine.update(None, self.frame(1))

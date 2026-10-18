@@ -135,7 +135,7 @@ class RuleEngine:
                     alerts.append(obstruction_alert(
                         incident_id=incident.id, camera_id=self.camera_id, rule=rule,
                         track=track, ts=tf.ts, elapsed=elapsed,
-                        confidence=track.confidence,
+                        confidence=incident.confidence_sum / incident.observations,
                         zone_name=zone.name, created_at=self.clock(),
                     ))
                 states.append(self._state(rule, incident, tf.ts,
