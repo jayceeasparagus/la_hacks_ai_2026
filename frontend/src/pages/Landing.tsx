@@ -117,6 +117,7 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
         <Wordmark size={24} />
         <nav className="flex items-center gap-10 text-[17px] text-muted">
           <a href="#how" className="transition hover:text-text">How it works</a>
+          <a href="#examples" className="transition hover:text-text">Examples</a>
           <a href={REPO_URL} target="_blank" rel="noreferrer" className="transition hover:text-text">GitHub</a>
           <button onClick={() => go('setup')} className="text-text">Get started</button>
         </nav>
@@ -203,6 +204,8 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
       </main>
 
       <HowItWorks />
+
+      <SafetyExamples />
 
       <footer className="relative z-10 flex items-center justify-between px-16 pb-12 pt-6 text-[15px] text-muted">
         <Wordmark size={18} />
@@ -291,6 +294,72 @@ function HowItWorks() {
           </div>
         </Step>
       </div>
+    </section>
+  )
+}
+
+// Real runs, rendered by demo/render_ppe_examples.py: Person 1's detector finds each worker, and the
+// hard-hat and hi-vis-vest checks are Gemini's answers on that worker's clearest crop. The boxes and
+// verdicts are baked into the video, so this section needs no backend.
+const SAFETY_EXAMPLES = [
+  {
+    video: '/examples/construction_site.mp4',
+    poster: '/examples/construction_site.jpg',
+    place: 'Construction site',
+    rule: 'Everyone in the construction zone wears a hard hat and a hi-vis vest.',
+    found: '4 workers checked. 3 in full gear; one is wearing a baseball cap instead of a hard hat.',
+  },
+  {
+    video: '/examples/warehouse.mp4',
+    poster: '/examples/warehouse.jpg',
+    place: 'Warehouse',
+    rule: 'Everyone on the warehouse floor wears a hard hat and a hi-vis vest.',
+    found: '3 workers checked. None in a hard hat or hi-vis vest: caps, a beanie and ordinary jackets.',
+  },
+]
+
+function SafetyExamples() {
+  return (
+    <section id="examples" className="relative z-10 px-16 pb-28 pt-8">
+      <div className="mb-12 flex items-end justify-between gap-10">
+        <div className="flex flex-col gap-3">
+          <span className="font-display text-[15px] font-medium text-accent-soft">Examples</span>
+          <h2 className="font-display text-[48px] font-semibold leading-none tracking-[-0.04em]">Site safety, checked</h2>
+        </div>
+        <p className="max-w-[460px] text-right text-[16px] leading-6 text-muted">
+          One sentence turns any site camera into a safety check. Each worker gets a hard-hat and a hi-vis-vest
+          check; it never identifies who anyone is, and every flag goes to a person.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-10">
+        {SAFETY_EXAMPLES.map((ex) => (
+          <figure key={ex.video} className="flex flex-col gap-5">
+            <div className="relative aspect-video overflow-hidden rounded-xl bg-panel ring-1 ring-black">
+              <video
+                src={ex.video}
+                poster={ex.poster}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            </div>
+            <figcaption className="flex flex-col gap-2">
+              <span className="font-display text-[22px] font-medium tracking-[-0.02em] text-text">{ex.place}</span>
+              <span className="text-[16px] leading-6 text-[#C9C6BF]">"{ex.rule}"</span>
+              <span className="text-[15px] leading-[22px] text-muted">{ex.found}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+
+      <p className="mt-8 text-[13px] leading-5 text-muted">
+        Green: gear seen. Amber: gear not seen, sent for review. Verdicts come from Gemini on each worker's
+        clearest frame and can be wrong, which is why a person confirms every flag. Footage: Pexels 5434220 and 4281236.
+      </p>
     </section>
   )
 }

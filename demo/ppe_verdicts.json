@@ -1,0 +1,98 @@
+{
+  "construction_site:19:hard_hat": {
+    "answer": false,
+    "confidence": 1.0,
+    "frame": 225,
+    "reason": "Person is wearing a baseball cap"
+  },
+  "construction_site:19:safety_vest": {
+    "answer": true,
+    "confidence": 1.0,
+    "frame": 225,
+    "reason": "Person has a hi-vis vest with reflective X pattern."
+  },
+  "construction_site:1:hard_hat": {
+    "answer": true,
+    "confidence": 0.8,
+    "frame": 375,
+    "reason": "Red hard hat is visible on top of person's head."
+  },
+  "construction_site:1:safety_vest": {
+    "answer": true,
+    "confidence": 1.0,
+    "frame": 375,
+    "reason": "Person is wearing a red hi-vis vest with yellow reflective stripes."
+  },
+  "construction_site:34:hard_hat": {
+    "answer": true,
+    "confidence": 1.0,
+    "frame": 338,
+    "reason": "A blue hard hat is visible on the person's head."
+  },
+  "construction_site:34:safety_vest": {
+    "answer": true,
+    "confidence": 1.0,
+    "frame": 338,
+    "reason": "Person has a hi-vis vest with reflective straps."
+  },
+  "construction_site:39:hard_hat": {
+    "answer": true,
+    "confidence": 1.0,
+    "frame": 401,
+    "reason": "Person is wearing a dark hard hat on their head."
+  },
+  "construction_site:39:safety_vest": {
+    "answer": true,
+    "confidence": 1.0,
+    "frame": 401,
+    "reason": "Person wearing dark jacket with hi-vis lime and reflective stripes."
+  },
+  "warehouse:10:hard_hat": {
+    "answer": false,
+    "confidence": 1.0,
+    "frame": 126,
+    "reason": "Person is wearing a beanie, not a hard hat."
+  },
+  "warehouse:10:safety_vest": {
+    "answer": false,
+    "confidence": 1.0,
+    "frame": 126,
+    "reason": "Person is wearing a dark green vest, not hi-vis."
+  },
+  "warehouse:1:hard_hat": {
+    "answer": false,
+    "confidence": 1.0,
+    "frame": 69,
+    "reason": "The person is not wearing a hard hat."
+  },
+  "warehouse:1:safety_vest": {
+    "answer": false,
+    "confidence": 1.0,
+    "frame": 69,
+    "reason": "No hi-vis vest/jacket. Wearing brown and beige jacket over black shirt."
+  },
+  "warehouse:25:hard_hat": {
+    "answer": null,
+    "confidence": 1.0,
+    "frame": 121,
+    "reason": "No person is visible in the image."
+  },
+  "warehouse:25:safety_vest": {
+    "answer": null,
+    "confidence": 1.0,
+    "frame": 121,
+    "reason": "No person is visible in the image."
+  },
+  "warehouse:6:hard_hat": {
+    "answer": false,
+    "confidence": 1.0,
+    "frame": 61,
+    "reason": "Wearing a red baseball cap, not a hard hat."
+  },
+  "warehouse:6:safety_vest": {
+    "answer": false,
+    "confidence": 1.0,
+    "frame": 61,
+    "reason": "Person is wearing a regular jacket, not hi-vis."
+  }
+}
