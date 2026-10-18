@@ -4,7 +4,6 @@
 // walkthrough when it scrolls into view.
 import { useEffect, useRef, useState } from 'react'
 import type { Page } from '../App'
-import Marker from '../components/Marker'
 import Stars from '../components/Stars'
 import Wordmark from '../components/Wordmark'
 import { clock } from '../format'
@@ -97,7 +96,7 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
             <a href="#how" className="transition hover:text-text">How it works</a>
             <a href="#examples" className="transition hover:text-text">Examples</a>
             <a href={REPO_URL} target="_blank" rel="noreferrer" className="transition hover:text-text">GitHub</a>
-            <button onClick={() => go('setup')} className="text-text">Get started</button>
+            <button onClick={() => go('setup')} className="text-text">Demo</button>
           </nav>
         </header>
 
@@ -118,7 +117,7 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
               style={{ '--d': '280ms' } as React.CSSProperties}
             >
               <button className="btn-primary group px-8 py-4 text-[19px]" onClick={() => go('setup')}>
-                Get started
+                Demo
                 <span className="transition-transform duration-300 group-hover:translate-x-1">
                   <Arrow />
                 </span>
@@ -222,7 +221,14 @@ function HowItWorks() {
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-black/40" />
             <div className="grain absolute inset-0" />
             <span className="absolute left-3 top-2 font-mono text-[10px] tracking-label text-text">CAM 02</span>
-            {stage >= 2 && <Marker bbox={[0.3, 0.55, 0.44, 0.85]} title="Bag blocking the exit" detail="5.4 s, flagged" small />}
+            {stage >= 2 && (
+              // a plain detection box, the way the backend's annotated stream draws them
+              <div className="chip-in absolute border-2 border-accent-soft" style={{ left: '30%', top: '55%', width: '14%', height: '30%' }}>
+                <span className="absolute -top-5 left-0 whitespace-nowrap bg-black/70 px-1.5 font-mono text-[10px] tracking-label text-accent-soft">
+                  BACKPACK 5.4 S
+                </span>
+              </div>
+            )}
           </div>
         </Step>
       </div>

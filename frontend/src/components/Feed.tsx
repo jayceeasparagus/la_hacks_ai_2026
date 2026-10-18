@@ -1,10 +1,9 @@
 // One camera monitor: the live stream with a broadcast-style readout on top.
 // If the stream drops, it shows SIGNAL LOST and keeps retrying without touching other feeds.
 import { useEffect, useState } from 'react'
-import { clock, objectsLabel } from '../format'
+import { clock } from '../format'
 import type { Camera, CameraStatus, Rule, RuleState } from '../types'
 import LiveVideo from './LiveVideo'
-import Marker from './Marker'
 
 interface Props {
   camera: Camera
@@ -14,13 +13,6 @@ interface Props {
   rules?: Rule[]
   large?: boolean
   onClick?: () => void
-}
-
-function markerTitle(s: RuleState, rules: Rule[]): string {
-  const object = objectsLabel([s.class_name])
-  const zone = rules.find((r) => r.id === s.rule_id)?.zone ?? s.rule_id
-  const title = zone.includes('exit') ? `${object} blocking the exit` : `${object} in ${zone.replace(/_/g, ' ')}`
-  return title.charAt(0).toUpperCase() + title.slice(1)
 }
 
 export default function Feed({ camera, index, status, ruleStates = [], rules = [], large, onClick }: Props) {
@@ -82,18 +74,6 @@ export default function Feed({ camera, index, status, ruleStates = [], rules = [
           <span className="text-[15px] text-text">No signal from {camera.name}</span>
         </div>
       )}
-
-      {large &&
-        ruleStates
-          .filter((s) => s.bbox && s.elapsed_seconds >= s.duration_seconds)
-          .map((s) => (
-            <Marker
-              key={`${s.rule_id}-${s.track_id}`}
-              bbox={s.bbox!}
-              title={markerTitle(s, rules)}
-              detail={`${s.elapsed_seconds.toFixed(1)} s, flagged`}
-            />
-          ))}
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 bg-gradient-to-t from-black/70 to-transparent px-4 pb-3 pt-10">
         <span className={`${large ? 'text-[22px]' : 'text-[16px]'} font-medium tracking-[-0.01em] text-text`}>

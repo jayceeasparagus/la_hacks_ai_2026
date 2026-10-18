@@ -56,7 +56,7 @@ body {
 
 /* ---- motion: quick, purposeful, and off for people who ask for reduced motion ---- */
 
-/* the marker circle draws itself, then its note fades up */
+/* a stroke drawing itself in (the check mark on a decided alert) */
 @keyframes marker-draw {
   from { stroke-dashoffset: 1; }
   to { stroke-dashoffset: 0; }
@@ -66,15 +66,6 @@ body {
   stroke-dashoffset: 1;
   animation: marker-draw 0.7s cubic-bezier(0.65, 0, 0.35, 1) forwards;
 }
-@keyframes note-in {
-  from { opacity: 0; translate: 0 6px; }
-  to { opacity: 1; translate: 0 0; }
-}
-.marker-note {
-  opacity: 0;
-  animation: note-in 0.4s ease-out 0.55s forwards;
-}
-
 /* page content rising in, staggered with --d */
 @keyframes rise {
   from { opacity: 0; translate: 0 14px; }
