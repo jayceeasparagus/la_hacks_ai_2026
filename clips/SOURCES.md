@@ -22,6 +22,36 @@ The Pexels files are the 720p renditions. Pexels allows free use with no attribu
 but identifiable people must not be shown "in a bad or offensive light". The Pexels and Pixabay
 terms also forbid automated scraping, so download by hand only.
 
+## Vision test clips (`clips/pexels/`, Person 1)
+
+Used by `backend/vision/test_zones.json`, `python -m vision.evidence_run` and `python -m vision.dump`.
+Download each by hand (Free download, 1080p). `python -m vision.fetch_test_clips` lists what's missing,
+`--open` opens those pages, and `--import <downloads folder>` renames and moves the files into place.
+It never downloads anything itself: Pexels' terms forbid automated downloading (Section 8) and
+redistributing the videos on their own (Section 5), so they stay out of git.
+
+| File | Source | License | Used for |
+| --- | --- | --- | --- |
+| `pexels/gate_man_ticket.mp4` | [Pexels 7251544](https://www.pexels.com/video/man-passing-a-ticket-gate-7251544/) | Pexels License | single-lane turnstile: the ideal choke point |
+| `pexels/gate_pass_cards.mp4` | [Pexels 7952194](https://www.pexels.com/video/people-swiping-their-pass-cards-before-entering-7952194/) | Pexels License | queue at turnstiles, shoulder bag |
+| `pexels/gate_woman_metro.mp4` | [Pexels 11565901](https://www.pexels.com/video/woman-walking-through-gate-at-metro-station-11565901/) | Pexels License | handheld; whole-frame zone |
+| `pexels/gate_subway_turnstile.mp4` | [Pexels 39617498](https://www.pexels.com/video/modern-subway-turnstile-entry-scene-39617498/) | Pexels License | wider turnstile row, backpacks |
+| `pexels/gate_nyc_turnstile.mp4` | [Pexels 16967317](https://www.pexels.com/video/the-everyday-act-of-walking-through-a-subway-turnstyle-in-new-york-city-the-video-is-silent-allowing-the-viewer-to-focus-on-the-visuals-of-the-scene-the-turnstyle-is-a-metal-structure-w-16967317/) | Pexels License | handheld walk through gates |
+| `pexels/ppe_workers_walking.mp4` | [Pexels 5434223](https://www.pexels.com/video/workers-walking-in-construction-site-5434223/) | Pexels License | helmets and vests from behind |
+| `pexels/ppe_group_walking.mp4` | [Pexels 8965526](https://www.pexels.com/video/construction-workers-walking-at-the-construction-site-8965526/) | Pexels License | helmets and vests walking toward the camera |
+| `pexels/ppe_worker_entering.mp4` | [Pexels 5434217](https://www.pexels.com/video/a-construction-worker-entering-a-building-basement-5434217/) | Pexels License | one worker at an entrance |
+| `pexels/stadium_entrance_gameday.mp4` | [Pexels 39239779](https://www.pexels.com/video/energetic-crowd-at-stadium-entrance-on-game-day-39239779/) | Pexels License | dense crowd (person threshold) |
+| `pexels/stadium_fans_rabat.mp4` | [Pexels 34686011](https://www.pexels.com/video/fans-walk-to-modern-stadium-in-rabat-morocco-34686011/) | Pexels License | crowd walking to a stadium, backpacks |
+| `pexels/wembley_station_entrance.mp4` | [Pexels 3405719](https://www.pexels.com/video/wembley-park-station-entrance-3405719/) | Pexels License | far, night-time plaza |
+| `pexels/hotel_luggage_enter.mp4` | [Pexels 39596352](https://www.pexels.com/video/travelers-with-luggage-enter-a-modern-hotel-39596352/) | Pexels License | suitcases; carried-object timer pause |
+| `pexels/airport_couple_enter.mp4` | [Pexels 7423654](https://www.pexels.com/video/couple-entering-a-airport-7423654/) | Pexels License | two people entering; held-object exit check |
+| `pexels/airport_checkpoint_walkthrough.mp4` | [Pexels 27778672](https://www.pexels.com/video/a-security-checkpoint-at-an-airport-with-people-walking-through-27778672/) | Pexels License | busy checkpoint |
+| `pexels/airport_checkpoint_busy.mp4` | [Pexels 32654547](https://www.pexels.com/video/busy-airport-terminal-security-checkpoint-scene-32654547/) | Pexels License | corridor choke point, handbags |
+| `pexels/concert_fans_phones.mp4` | [Pexels 12719510](https://www.pexels.com/video/fans-recording-concert-with-smartphones-12719510/) | Pexels License | phones in a dark crowd |
+| `pexels/concert_man_filming.mp4` | [Pexels 12695730](https://www.pexels.com/video/man-filming-concert-12695730/) | Pexels License | one phone held up (not a pro camera) |
+| `pexels/street_smartphones.mp4` | [Pexels 39102147](https://www.pexels.com/video/busy-street-life-with-people-using-smartphones-39102147/) | Pexels License | phones in daylight |
+| `pexels/walking_phone_sidewalk.mp4` | [Pexels 7867420](https://www.pexels.com/video/man-holding-a-cellphone-while-walking-on-the-sidewalk-7867420/) | Pexels License | phone and bag in hand |
+
 ## Dataset (`datasets/`)
 
 | Folder | Source | License | Used for |
