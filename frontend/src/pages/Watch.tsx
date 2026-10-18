@@ -6,6 +6,7 @@ import { api } from '../api'
 import AlertCard from '../components/AlertCard'
 import Feed from '../components/Feed'
 import Wordmark from '../components/Wordmark'
+import { loadClip, loadStill, saveClip, saveStill, type Clip } from '../evidence'
 import { captureFrame, captureSnippet, isMockBackend, snippetAfterFrames } from '../localCamera'
 import { loadPolicy } from '../rules'
 import type { Alert, Camera, Decision } from '../types'
@@ -23,7 +24,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
   const [toast, setToast] = useState<Alert | null>(null)
   const [fresh, setFresh] = useState<Set<string>>(new Set()) // arrived in the last few seconds
   const [resolving, setResolving] = useState<Record<string, Decision>>({})
-  const [snippets, setSnippets] = useState<Record<string, { frames: string[]; detectAt: number }>>({})
+  const [snippets, setSnippets] = useState<Record<string, Clip>>({})
   const [, tick] = useState(0)
 
   useEffect(() => {
@@ -31,9 +32,19 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
       setCameras(c)
       setSelected((s) => s ?? c.find((x) => x.id === 'cam_exit')?.id ?? c[0]?.id ?? null)
     })
-    // the mock's saved evidence is placeholder art, so history from the mock shows text only
+    // with the mock, evidence is what this browser recorded (the mock's own images are
+    // placeholders), so restore each alert's saved still and any clip from this session
     Promise.all([api.getAlerts(), isMockBackend()])
-      .then(([list, mock]) => setAlerts(mock ? list.map((a) => ({ ...a, evidence_image: null })) : list))
+      .then(([list, mock]) => {
+        if (!mock) return setAlerts(list)
+        setAlerts(list.map((a) => ({ ...a, evidence_image: loadStill(a.id) })))
+        const kept: Record<string, Clip> = {}
+        for (const a of list) {
+          const clip = loadClip(a.id)
+          if (clip) kept[a.id] = clip
+        }
+        setSnippets(kept)
+      })
       .catch(() => {})
     const t = window.setInterval(() => tick((n) => n + 1), 15000) // refresh "2 min ago"
     return () => window.clearInterval(t)
@@ -42,13 +53,22 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
   const onAlert = useCallback((incoming: Alert, isUpdate: boolean) => {
     let alert = incoming
     if (!isUpdate) {
-      // testing with this browser's webcam: keep the real frame the alert fired on as evidence
+      // testing with this browser's webcam: keep the real frame the alert fired on, and a few
+      // seconds of footage around it, as evidence
       const frame = captureFrame(alert.camera_id)
-      if (frame) alert = { ...alert, evidence_image: frame }
+      if (frame) {
+        alert = { ...alert, evidence_image: frame }
+        saveStill(alert.id, frame)
+      } else if (alert.evidence_image?.endsWith('.svg')) {
+        alert = { ...alert, evidence_image: null } // mock placeholder art, not real evidence
+      }
       const id = alert.id
       captureSnippet(alert.camera_id).then((frames) => {
+        if (frames.length < 2) return
         // the snippet runs a moment past the alert, so the detection sits that many frames from the end
-        if (frames.length > 1) setSnippets((s) => ({ ...s, [id]: { frames, detectAt: Math.max(0, frames.length - snippetAfterFrames) } }))
+        const clip = { frames, detectAt: Math.max(0, frames.length - snippetAfterFrames) }
+        saveClip(id, clip)
+        setSnippets((s) => ({ ...s, [id]: clip }))
       })
       setToast(alert)
       setFresh((f) => new Set(f).add(alert.id))
@@ -75,7 +95,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
 
   const openCount = alerts.filter((a) => a.status === 'open').length
   useEffect(() => {
-    document.title = openCount ? `(${openCount}) policylens` : 'policylens'
+    document.title = openCount ? `(${openCount}) WatchDog` : 'WatchDog'
   }, [openCount])
 
   // show the decision on the card for a moment, then move it to reviewed
@@ -131,8 +151,8 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
           <span className="text-[15px] text-muted">
             {live.connected ? `${onlineCount} of ${cameras.length} cameras live` : 'Reconnecting…'}
           </span>
-          <button className="text-muted hover:text-text" onClick={() => go('setup')}>edit policy</button>
-          <button className="text-text" onClick={stop}>stop</button>
+          <button className="text-muted hover:text-text" onClick={() => go('setup')}>Edit policy</button>
+          <button className="text-text" onClick={stop}>Stop</button>
         </div>
       </header>
 
@@ -176,7 +196,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`rounded-full border px-3.5 py-1.5 text-[14px] transition ${tab === t ? 'border-line text-text' : 'border-transparent text-muted hover:text-text'}`}
+                className={`rounded-full border px-3.5 py-1.5 text-[14px] capitalize transition ${tab === t ? 'border-line text-text' : 'border-transparent text-muted hover:text-text'}`}
               >
                 {t}
               </button>
@@ -187,7 +207,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
               className="ml-auto rounded-full border border-line bg-transparent px-3 py-1.5 text-[14px] text-text outline-none"
               aria-label="Filter by camera"
             >
-              <option value="all">all cameras</option>
+              <option value="all">All cameras</option>
               {cameras.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}

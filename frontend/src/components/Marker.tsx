@@ -48,7 +48,7 @@ export default function Marker({ bbox, title, detail, small }: Props) {
     <div ref={ref} className="pointer-events-none absolute inset-0">
       {size.w > 0 && (
         <svg className="absolute inset-0 overflow-visible" width={size.w} height={size.h}>
-          <path className="marker-draw" pathLength={1} d={d} fill="none" stroke="#8FB2FF" strokeWidth={small ? 2.5 : 3.5} strokeLinecap="round" />
+          <path className="marker-draw" pathLength={1} d={d} fill="none" stroke="#5B7BC2" strokeWidth={small ? 2.5 : 3.5} strokeLinecap="round" />
         </svg>
       )}
       <div
@@ -60,12 +60,12 @@ export default function Marker({ bbox, title, detail, small }: Props) {
         }
       >
         <span
-          className={`whitespace-nowrap font-semibold italic tracking-[-0.01em] text-accent ${small ? 'text-[15px] leading-5' : 'text-[22px] leading-7'}`}
+          className={`whitespace-nowrap font-semibold italic tracking-[-0.01em] text-accent-soft ${small ? 'text-[15px] leading-5' : 'text-[22px] leading-7'}`}
         >
           {title}
         </span>
         {detail && (
-          <span className={`whitespace-nowrap italic text-accent ${small ? 'text-[13px] leading-4' : 'text-[17px] leading-6'}`}>
+          <span className={`whitespace-nowrap italic text-accent-soft ${small ? 'text-[13px] leading-4' : 'text-[17px] leading-6'}`}>
             {detail}
           </span>
         )}

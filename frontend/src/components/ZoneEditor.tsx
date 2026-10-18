@@ -118,7 +118,7 @@ export default function ZoneEditor({ camera, zones: initial, onSave, onClose }: 
               onPointerLeave={() => setHover(null)}
             >
               {zones.map((z) => (
-                <polygon key={z.id} points={pts(z.polygon)} fill="rgba(143,178,255,0.12)" stroke="#F1EEE6" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                <polygon key={z.id} points={pts(z.polygon)} fill="rgba(45, 79, 150,0.12)" stroke="#F1EEE6" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
               ))}
               {drag && (
                 <rect
@@ -126,8 +126,8 @@ export default function ZoneEditor({ camera, zones: initial, onSave, onClose }: 
                   y={Math.min(drag.start[1], drag.end[1])}
                   width={Math.abs(drag.end[0] - drag.start[0])}
                   height={Math.abs(drag.end[1] - drag.start[1])}
-                  fill="rgba(143,178,255,0.12)"
-                  stroke="#8FB2FF"
+                  fill="rgba(45, 79, 150,0.12)"
+                  stroke="#2D4F96"
                   strokeWidth={1.5}
                   vectorEffect="non-scaling-stroke"
                 />
@@ -136,7 +136,7 @@ export default function ZoneEditor({ camera, zones: initial, onSave, onClose }: 
                 <polyline
                   points={pts(hover ? [...draft, hover] : draft)}
                   fill="none"
-                  stroke="#8FB2FF"
+                  stroke="#2D4F96"
                   strokeWidth={1.5}
                   strokeDasharray="6 5"
                   vectorEffect="non-scaling-stroke"

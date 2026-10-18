@@ -16,14 +16,14 @@ interface Props {
 }
 
 const DECISIONS: { value: Decision; label: string; key: string }[] = [
-  { value: 'confirm', label: 'confirm', key: 'C' },
-  { value: 'dismiss', label: 'dismiss', key: 'D' },
-  { value: 'unclear', label: 'unsure', key: 'U' },
+  { value: 'confirm', label: 'Confirm', key: 'C' },
+  { value: 'dismiss', label: 'Dismiss', key: 'D' },
+  { value: 'unclear', label: 'Unsure', key: 'U' },
 ]
 
 const RESOLVED: Record<Decision, string> = { confirm: 'Confirmed', dismiss: 'Dismissed', unclear: 'Marked unsure' }
 
-const RESULT: Record<string, string> = { confirmed: 'confirmed', dismissed: 'dismissed', unclear: 'marked unsure' }
+const RESULT: Record<string, string> = { confirmed: 'Confirmed', dismissed: 'Dismissed', unclear: 'Marked unsure' }
 
 export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolving, snippet, onDecide }: Props) {
   const [busy, setBusy] = useState(false)
@@ -32,8 +32,15 @@ export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolvi
 
   if (!open) {
     return (
-      <div className="chip-in flex shrink-0 items-baseline justify-between gap-3 py-1.5 text-[14px]">
-        <span className="truncate text-muted">{alert.title}</span>
+      <div className="chip-in flex shrink-0 items-center gap-3 py-1.5 text-[14px]">
+        {(snippet?.frames[snippet.detectAt] ?? alert.evidence_image) && (
+          <img
+            src={snippet?.frames[snippet.detectAt] ?? alert.evidence_image!}
+            alt=""
+            className="h-9 w-16 shrink-0 rounded-[3px] object-cover"
+          />
+        )}
+        <span className="min-w-0 flex-1 truncate text-muted">{alert.title}</span>
         <span className="shrink-0 text-[13px] text-dim">{RESULT[alert.status]}</span>
       </div>
     )
@@ -67,7 +74,7 @@ export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolvi
       </div>
       <div className="flex flex-col gap-1">
         <span className="text-[13px] text-muted">
-          <span className={urgent ? 'text-accent' : 'text-text'}>{urgent ? 'Urgent' : 'Review'}</span> · {cameraName} ·{' '}
+          <span className={urgent ? 'text-accent-soft' : 'text-text'}>{urgent ? 'Urgent' : 'Review'}</span> · {cameraName} ·{' '}
           {relativeTime(alert.created_at)}
         </span>
         <span className="text-[18px] font-medium leading-[23px] tracking-[-0.01em] text-text">{alert.title}</span>

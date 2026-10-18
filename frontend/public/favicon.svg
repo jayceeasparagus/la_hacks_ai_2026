@@ -2,5 +2,5 @@
   <!-- a lens: cream ring on black, with the blue marker loop inside -->
   <rect width="64" height="64" rx="14" fill="#000"/>
   <circle cx="32" cy="32" r="19" fill="none" stroke="#F1EEE6" stroke-width="4"/>
-  <path d="M27 41 C20 37 20 26 30 23 C39 21 44 28 42 35 C40 41 33 43 28 41" fill="none" stroke="#8FB2FF" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M27 41 C20 37 20 26 30 23 C39 21 44 28 42 35 C40 41 33 43 28 41" fill="none" stroke="#5B7BC2" stroke-width="3.6" stroke-linecap="round"/>
 </svg>

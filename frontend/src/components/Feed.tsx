@@ -19,7 +19,8 @@ interface Props {
 function markerTitle(s: RuleState, rules: Rule[]): string {
   const object = objectsLabel([s.class_name])
   const zone = rules.find((r) => r.id === s.rule_id)?.zone ?? s.rule_id
-  return zone.includes('exit') ? `${object} blocking the exit` : `${object} in ${zone.replace(/_/g, ' ')}`
+  const title = zone.includes('exit') ? `${object} blocking the exit` : `${object} in ${zone.replace(/_/g, ' ')}`
+  return title.charAt(0).toUpperCase() + title.slice(1)
 }
 
 export default function Feed({ camera, index, status, ruleStates = [], rules = [], large, onClick }: Props) {
@@ -59,7 +60,7 @@ export default function Feed({ camera, index, status, ruleStates = [], rules = [
       {/* soft inner glow while a rule is past its threshold on this camera */}
       <div
         className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${alerting ? 'opacity-100' : 'opacity-0'}`}
-        style={{ boxShadow: 'inset 0 0 120px rgba(143,178,255,0.28)' }}
+        style={{ boxShadow: 'inset 0 0 120px rgba(45, 79, 150,0.28)' }}
       />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between bg-gradient-to-b from-black/60 to-transparent px-4 pb-6 pt-3">
@@ -106,7 +107,7 @@ export default function Feed({ camera, index, status, ruleStates = [], rules = [
               <div key={`${s.rule_id}-${s.track_id}`} className="chip-in w-56 rounded-md bg-black/70 px-3 py-2 backdrop-blur-sm">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="truncate text-[13px] text-text">{ruleName(s.rule_id)}</span>
-                  <span className={`font-mono text-[12px] ${reached ? 'text-accent' : 'text-text'}`}>
+                  <span className={`font-mono text-[12px] ${reached ? 'text-accent-soft' : 'text-text'}`}>
                     {s.elapsed_seconds.toFixed(1)} / {s.duration_seconds.toFixed(0)} s
                   </span>
                 </div>

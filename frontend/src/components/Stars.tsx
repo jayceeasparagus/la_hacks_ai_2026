@@ -28,7 +28,7 @@ export default function Stars({ count = 140, seed = 7 }: { count?: number; seed?
     <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
       {stars.map((s, i) => (
         <g key={i}>
-          {s.bright && <circle cx={`${s.x}%`} cy={`${s.y}%`} r={s.r * 3} fill="#8FB2FF" fillOpacity={0.08} />}
+          {s.bright && <circle cx={`${s.x}%`} cy={`${s.y}%`} r={s.r * 3} fill="#2D4F96" fillOpacity={0.08} />}
           <circle cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="#F1EEE6" fillOpacity={s.o} />
         </g>
       ))}

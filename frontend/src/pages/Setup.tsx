@@ -100,11 +100,11 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
       <header className="flex items-center justify-between px-16 py-8">
         <Wordmark size={24} onClick={() => go('landing')} />
         <nav className="flex items-center gap-6 text-[17px]">
-          <span className="text-text">connect</span>
+          <span className="text-text">Connect</span>
           <span className="text-dim">→</span>
-          <span className="text-text">write</span>
+          <span className="text-text">Write</span>
           <span className="text-dim">→</span>
-          <span className="text-dim">watch</span>
+          <span className="text-dim">Watch</span>
         </nav>
       </header>
 
@@ -131,7 +131,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
             <div className="mt-4 flex items-center justify-between">
               <span className="text-[14px] text-muted">{compiling ? 'Reading your policy…' : '⌘ Enter to read it'}</span>
               <button className="btn-primary py-2.5 text-[15px]" onClick={compile} disabled={compiling || !text.trim()}>
-                {result ? 'read again' : 'read it'}
+                {result ? 'Read again' : 'Read it'}
               </button>
             </div>
           </div>
@@ -176,7 +176,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
           <div className="mt-12 flex items-center justify-between gap-6">
             <span className="text-[14px] text-muted">{error}</span>
             <button className="btn-primary group" onClick={start} disabled={starting || enabledCount === 0}>
-              {starting ? 'starting…' : 'start watching'}
+              {starting ? 'Starting…' : 'Start watching'}
               <span className="transition-transform duration-300 group-hover:translate-x-1">
                 <Arrow />
               </span>
@@ -207,7 +207,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
                       <polygon
                         key={z.id}
                         points={z.polygon.map((p) => p.join(',')).join(' ')}
-                        fill="rgba(143,178,255,0.08)"
+                        fill="rgba(45, 79, 150,0.08)"
                         stroke="#F1EEE6"
                         strokeWidth={1.2}
                         vectorEffect="non-scaling-stroke"
@@ -227,7 +227,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
                     className="shrink-0 text-[13px] text-dim transition hover:text-text"
                     onClick={() => saveCameras(cameras.filter((c) => c.id !== cam.id))}
                   >
-                    remove
+                    Remove
                   </button>
                 </div>
                 <span className="-mt-2 truncate text-[13px] text-muted">
@@ -249,7 +249,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
           ) : (
             cameras.length < MAX_CAMERAS && (
               <button className="self-start text-[15px] text-muted transition hover:text-text" onClick={() => setAdding(true)}>
-                + connect another camera
+                + Connect another camera
               </button>
             )
           )}
@@ -310,9 +310,9 @@ function RuleRow({ index, rule, where, onChange }: { index: number; rule: Rule; 
                 role="radio"
                 aria-checked={rule.severity === s}
                 onClick={() => onChange({ severity: s })}
-                className={`rounded-full border px-3 py-1 transition ${
+                className={`rounded-full border px-3 py-1 capitalize transition ${
                   rule.severity === s
-                    ? `border-line ${s === 'urgent' ? 'text-accent' : 'text-text'}`
+                    ? `border-line ${s === 'urgent' ? 'text-accent-soft' : 'text-text'}`
                     : 'border-transparent text-dim hover:text-muted'
                 }`}
               >
@@ -364,8 +364,8 @@ function AddCamera({ existing, onAdd, onCancel }: { existing: Camera[]; onAdd: (
         onChange={(e) => setSource(e.target.value)}
       />
       <div className="flex gap-5 pt-1 text-[15px]">
-        <button type="submit" className="text-text">connect</button>
-        <button type="button" className="text-muted hover:text-text" onClick={onCancel}>cancel</button>
+        <button type="submit" className="text-text">Connect</button>
+        <button type="button" className="text-muted hover:text-text" onClick={onCancel}>Cancel</button>
       </div>
     </form>
   )

@@ -11,13 +11,14 @@ export default {
         text: '#EDEDED',
         muted: '#8A8A8E',
         dim: '#55555A',
-        accent: '#8FB2FF',
-        'accent-ink': '#0B1020',
+        accent: '#2D4F96',
+        'accent-soft': '#8EA6D8', // lighter tint for small text over video
+        'accent-ink': '#060E1F',
       },
       fontFamily: {
-        sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'],
-        display: ['Poppins', '"Instrument Sans"', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        display: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
       letterSpacing: {
         label: '0.08em',

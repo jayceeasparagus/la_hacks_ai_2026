@@ -20,70 +20,16 @@ interface WallFeed {
   bbox: [number, number, number, number]
   title: string
   detail: string
-  // placement in the cluster, as % of the cluster box; depth scales the parallax
-  left: number
-  top: number
-  width: number
-  depth: number
-  z: number
-  corner: 'tl' | 'tr' | 'bl' | 'br' // where its label goes: the corner the big monitor doesn't cover
+  depth: number // scales the parallax as the cursor moves
 }
 
-// A loose cluster: a small rooftop screen at the top, the big exit screen below it with the
-// stairwell to its left and the lobby to its right, and the entrance and dock along the bottom,
-// all separated by clear gaps so nothing overlaps.
-// Heights are width * 0.72 in these units (16:9 in a 1.28 box).
+// A 2x2 wall of monitors, like the bank of screens in a security office.
 const WALL: WallFeed[] = [
-  { id: 'cam_exit', name: 'Emergency exit', video: '/footage/exit.mp4', bbox: [0.3, 0.56, 0.44, 0.84], title: 'bag blocking the exit', detail: '5.4 s, flagged', left: 24, top: 28, width: 44, depth: 1, z: 30, corner: 'bl' },
-  { id: 'cam_stairs', name: 'Stairwell', video: '/footage/stairs.mp4', bbox: [0.2, 0.3, 0.34, 0.74], title: 'just passing', detail: 'ignored', left: 0, top: 20, width: 21, depth: 0.5, z: 20, corner: 'bl' },
-  { id: 'cam_lobby', name: 'Lobby', video: '/footage/lobby.mp4', bbox: [0.5, 0.36, 0.64, 0.66], title: 'clear bag', detail: 'all good', left: 70, top: 32, width: 30, depth: 0.65, z: 20, corner: 'bl' },
-  { id: 'cam_entrance', name: 'Main entrance', video: '/footage/entrance.mp4', bbox: [0.12, 0.48, 0.26, 0.76], title: 'bag, probably opaque', detail: 'sent for review', left: 4, top: 66, width: 34, depth: 0.75, z: 20, corner: 'bl' },
-  { id: 'cam_roof', name: 'Rooftop', video: '/footage/roof.mp4', bbox: [0.3, 0.36, 0.44, 0.7], title: 'all quiet', detail: 'nothing to flag', left: 46, top: 3, width: 26, depth: 0.4, z: 20, corner: 'bl' },
-  { id: 'cam_dock', name: 'Loading dock', video: '/footage/dock.mp4', bbox: [0.5, 0.42, 0.66, 0.74], title: 'chair by the door', detail: '2.1 s, watching', left: 50, top: 64, width: 38, depth: 0.55, z: 20, corner: 'bl' },
+  { id: 'cam_exit', name: 'Emergency exit', video: '/footage/exit.mp4', bbox: [0.3, 0.56, 0.44, 0.84], title: 'Bag blocking the exit', detail: '5.4 s, flagged', depth: 1 },
+  { id: 'cam_lobby', name: 'Lobby', video: '/footage/lobby.mp4', bbox: [0.5, 0.36, 0.64, 0.66], title: 'Clear bag', detail: 'All good', depth: 0.8 },
+  { id: 'cam_entrance', name: 'Main entrance', video: '/footage/entrance.mp4', bbox: [0.12, 0.48, 0.26, 0.76], title: 'Bag, probably opaque', detail: 'Sent for review', depth: 0.9 },
+  { id: 'cam_dock', name: 'Loading dock', video: '/footage/dock.mp4', bbox: [0.5, 0.42, 0.66, 0.74], title: 'Chair by the door', detail: '2.1 s, watching', depth: 0.7 },
 ]
-
-// Monitors receding into the dark behind the cluster, toward a vanishing point. Purely
-// decorative: smaller, dimmer and softer the farther away they are, and they move less.
-interface FarFeed {
-  left: number
-  top: number
-  width: number
-  depth: number // 0 = at the vanishing point, 1 = just behind the cluster
-  light: string
-}
-
-const VANISH = { x: 50, y: 50 } // % of the cluster box: straight behind the big monitor
-
-const VOID: FarFeed[] = (() => {
-  let seed = 11
-  const rand = () => {
-    seed = (seed * 16807) % 2147483647
-    return seed / 2147483647
-  }
-  const out: FarFeed[] = []
-  // nearest ring first: close to the cluster in size, then shrinking toward the vanishing point
-  const rings = [
-    { depth: 0.85, count: 7 },
-    { depth: 0.66, count: 8 },
-    { depth: 0.48, count: 9 },
-    { depth: 0.32, count: 10 },
-  ]
-  for (const ring of rings) {
-    for (let i = 0; i < ring.count; i++) {
-      const angle = (i / ring.count) * Math.PI * 2 + rand() * 0.45
-      const dist = 22 + ring.depth * (58 + rand() * 12)
-      const width = 34 * ring.depth * (0.9 + rand() * 0.2)
-      const height = width * 0.72
-      const left = VANISH.x + Math.cos(angle) * dist * 1.15 - width / 2
-      const top = VANISH.y + Math.sin(angle) * dist * 0.9 - height / 2
-      // stay within the cluster's side of the page so nothing sits behind the headline
-      // spill past the cluster on the top, right and bottom, but never left toward the headline
-      if (left < 0 || left + width > 118 || top < -22 || top + height > 118) continue
-      out.push({ left, top, width, depth: ring.depth, light: `${30 + rand() * 40}% ${30 + rand() * 40}%` })
-    }
-  }
-  return out
-})()
 
 const BOOT_MS = 350
 const BOOT_STEP_MS = 160
@@ -145,9 +91,7 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
   // the lens only shows while the cursor is over a monitor, never in the gaps between them
   const onClusterMove = (e: React.PointerEvent) => {
     const box = clusterRef.current!.getBoundingClientRect()
-    // topmost monitor under the cursor (the focused one is raised, then WALL order is front to back)
-    const order = [focused, ...WALL.map((_, i) => i).filter((i) => i !== focused)]
-    const hit = order.find((i) => {
+    const hit = WALL.map((_, i) => i).find((i) => {
       const r = tileRefs.current[i]?.getBoundingClientRect()
       return r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
     })
@@ -172,20 +116,20 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
       <header className="rise relative z-40 flex items-center justify-between px-16 py-8">
         <Wordmark size={24} />
         <nav className="flex items-center gap-10 text-[17px] text-muted">
-          <a href="#how" className="transition hover:text-text">how it works</a>
-          <a href={REPO_URL} target="_blank" rel="noreferrer" className="transition hover:text-text">github</a>
-          <button onClick={() => go('setup')} className="text-text">get started</button>
+          <a href="#how" className="transition hover:text-text">How it works</a>
+          <a href={REPO_URL} target="_blank" rel="noreferrer" className="transition hover:text-text">GitHub</a>
+          <button onClick={() => go('setup')} className="text-text">Get started</button>
         </nav>
       </header>
 
       <main className="relative z-10 grid min-h-[calc(100vh-96px)] grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] items-center gap-14 pb-10 pl-16 pr-16">
         <section className="relative z-20 flex flex-col gap-8">
           <h1
-            className="rise font-display text-[clamp(72px,8vw,124px)] font-semibold leading-[0.95] tracking-[-0.05em]"
+            className="rise font-display text-[clamp(60px,6.4vw,100px)] font-semibold leading-[0.95] tracking-[-0.035em]"
             style={{ '--d': '80ms' } as React.CSSProperties}
           >
-            <span className="text-text">policy</span>
-            <span className="text-accent">lens</span>
+            <span className="text-text">Watch</span>
+            <span className="text-accent">Dog</span>
           </h1>
           <p
             className="rise max-w-[520px] text-balance text-[24px] leading-[36px] text-[#C9C6BF]"
@@ -195,13 +139,13 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
           </p>
           <div className="rise flex items-center gap-8" style={{ '--d': '300ms' } as React.CSSProperties}>
             <button className="btn-primary group" onClick={() => go('setup')}>
-              get started
+              Get started
               <span className="transition-transform duration-300 group-hover:translate-x-1">
                 <Arrow />
               </span>
             </button>
             <a href="#how" className="text-[17px] text-muted transition hover:text-text">
-              see how it works
+              See how it works
             </a>
           </div>
         </section>
@@ -213,49 +157,14 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
             target.current = null
             setLensOn(false)
           }}
-          className="relative z-10 aspect-[1.28] w-full"
+          className="relative z-10 grid w-full grid-cols-2 gap-3"
         >
-          {VOID.map((far, i) => (
-            <div
-              key={`far-${i}`}
-              aria-hidden="true"
-              className="pointer-events-none absolute transition-transform duration-700 ease-out"
-              style={{
-                left: `${far.left}%`,
-                top: `${far.top}%`,
-                width: `${far.width}%`,
-                zIndex: 1,
-                opacity: 0.2 + far.depth * 0.4,
-                filter: `brightness(${0.55 + far.depth * 0.35}) contrast(0.9)`,
-                transform: `translate(${tilt.x * far.depth * -10}px, ${tilt.y * far.depth * -7}px)`,
-              }}
-            >
-              <div
-                className="power-on relative aspect-video overflow-hidden rounded-lg bg-panel ring-1 ring-white/[0.05]"
-                style={
-                  {
-                    '--d': `${BOOT_MS + 700 + (1 - far.depth) * 900 + (i % 5) * 60}ms`,
-                    background: `radial-gradient(ellipse 75% 80% at ${far.light}, #464645 0%, #222221 60%, #0e0e0e 100%)`,
-                  } as React.CSSProperties
-                }
-              >
-                <div className="grain absolute inset-0 opacity-60" />
-              </div>
-            </div>
-          ))}
-
           {WALL.map((feed, i) => (
             <div
               key={feed.id}
               ref={(el) => (tileRefs.current[i] = el)}
-              className="absolute cursor-none transition-transform duration-700 ease-out"
-              style={{
-                left: `${feed.left}%`,
-                top: `${feed.top}%`,
-                width: `${feed.width}%`,
-                zIndex: feed.z,
-                transform: `translate(${tilt.x * feed.depth * -14}px, ${tilt.y * feed.depth * -10}px)`,
-              }}
+              className="relative cursor-none transition-transform duration-700 ease-out"
+              style={{ transform: `translate(${tilt.x * feed.depth * -6}px, ${tilt.y * feed.depth * -4}px)` }}
             >
               <div
                 className="float"
@@ -268,15 +177,11 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
                   <Footage src={feed.video} offset={i * 1.7} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/45" />
                   <div className="grain absolute inset-0" />
-                  <span
-                    className={`absolute flex gap-2 whitespace-nowrap ${feed.corner[0] === 't' ? 'top-2' : 'bottom-2'} ${feed.corner[1] === 'l' ? 'left-3' : 'right-3 flex-row-reverse'}`}
-                  >
-                    <span className="font-mono text-[10px] leading-4 tracking-label text-text/70">CAM {String(i + 1).padStart(2, '0')}</span>
-                    <span className={`font-medium leading-4 text-text ${feed.width < 30 ? 'text-[11px]' : 'text-[13px]'}`}>{feed.name}</span>
+                  <span className="absolute left-3 top-2 font-mono text-[10px] tracking-label text-text/70">
+                    CAM {String(i + 1).padStart(2, '0')}
                   </span>
-                  {i === 0 && (
-                    <span className="absolute right-3 top-2 font-mono text-[10px] tracking-label text-text/70">{clock(now)}</span>
-                  )}
+                  <span className="absolute right-3 top-2 font-mono text-[10px] tracking-label text-text/70">{clock(now)}</span>
+                  <span className="absolute bottom-2 left-3 text-[14px] font-medium text-text">{feed.name}</span>
                   {booted && focused === i && (
                     <Marker key={`${i}-${focused}`} bbox={feed.bbox} title={feed.title} detail={feed.detail} small />
                   )}
@@ -369,7 +274,7 @@ function HowItWorks() {
                     <span className="text-[16px] text-text">{r.name}</span>
                     <span className="text-[13px] text-muted">{r.where}</span>
                   </span>
-                  <span className={`text-[13px] ${r.when === 'urgent' ? 'text-accent' : 'text-muted'}`}>{r.when}</span>
+                  <span className={`text-[13px] capitalize ${r.when === 'urgent' ? 'text-accent-soft' : 'text-muted'}`}>{r.when}</span>
                 </li>
               ) : null,
             )}
@@ -382,7 +287,7 @@ function HowItWorks() {
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-black/40" />
             <div className="grain absolute inset-0" />
             <span className="absolute left-3 top-2 font-mono text-[10px] tracking-label text-text">CAM 02</span>
-            {stage >= 2 && <Marker bbox={[0.3, 0.55, 0.44, 0.85]} title="bag blocking the exit" detail="5.4 s, flagged" small />}
+            {stage >= 2 && <Marker bbox={[0.3, 0.55, 0.44, 0.85]} title="Bag blocking the exit" detail="5.4 s, flagged" small />}
           </div>
         </Step>
       </div>
@@ -394,7 +299,7 @@ function Step({ n, title, body, children }: { n: number; title: string; body: st
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <span className="font-display text-[15px] font-medium text-accent">{n}</span>
+        <span className="font-display text-[15px] font-medium text-accent-soft">{n}</span>
         <h3 className="font-display text-[22px] font-medium tracking-[-0.02em] text-text">{title}</h3>
         <p className="text-[15px] leading-[22px] text-muted">{body}</p>
       </div>
