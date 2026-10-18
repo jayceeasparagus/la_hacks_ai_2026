@@ -1,0 +1,71 @@
+from concurrent.futures import ThreadPoolExecutor
+import unittest
+
+from app.models import Track, TrackFrame
+from engine.engine import RuleEngine
+from engine.fake_tracks import SCENARIOS, scenario, synthetic_config
+
+
+class TemporalEngineTests(unittest.TestCase):
+    def engine(self, camera='cam_exit'):
+        zones, rules = synthetic_config(camera)
+        return RuleEngine(camera, zones, rules, session_id='test',
+                          clock=lambda: '2026-10-17T00:00:00Z')
+
+
+    def frame(self, ts, track_id=1, bbox=(0.3, 0.3, 0.5, 0.7), confidence=0.9,
+              camera='cam_exit', empty=False):
+        return TrackFrame(camera_id=camera, ts=ts, tracks=[] if empty else [
+            Track(track_id=track_id, object_class='backpack', bbox=bbox,
+                  confidence=confidence)])
+
+
+    def run_frames(self, engine, frames):
+        alerts = []
+        for frame in frames:
+            _, new = engine.update(None, frame)
+            alerts.extend(new)
+        return alerts
+
+
+    def test_threshold_not_before_five_seconds(self):
+        engine = self.engine()
+        for tick in range(50):
+            _, alerts = engine.update(None, self.frame(tick / 10))
+            self.assertEqual(alerts, [])
+        states, alerts = engine.update(None, self.frame(5))
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(states[0].phase, 'alerted')
+        self.assertEqual(alerts[0].evidence_status, 'unavailable')
+        self.assertIsNone(alerts[0].evidence_clip_url)
+
+
+    def test_wrong_camera_and_rewind_do_not_mutate_state(self):
+        engine = self.engine()
+        engine.update(None, self.frame(1))
+        for frame in [self.frame(0), self.frame(1), self.frame(2, camera='other')]:
+            with self.subTest(frame=frame), self.assertRaises(ValueError):
+                engine.update(None, frame)
+        self.assertEqual(engine.update(None, self.frame(2))[0][0].elapsed_seconds, 1)
+
+
+    def test_reset_allows_rewind_and_uses_new_incident_ids(self):
+        engine = self.engine()
+        frames = [self.frame(tick / 10) for tick in range(51)]
+        first = self.run_frames(engine, frames)[0]
+        engine.reset()
+        second = self.run_frames(engine, frames)[0]
+        self.assertNotEqual(first.id, second.id)
+
+
+    def test_missing_zone_and_invalid_polygon_rejected(self):
+        zones, rules = synthetic_config()
+        with self.assertRaises(ValueError):
+            RuleEngine('cam_exit', [], rules)
+        zones[0].polygon = [(0, 0), (1, 1), (1, 0), (0, 1)]
+        with self.assertRaises(ValueError):
+            RuleEngine('cam_exit', zones, rules)
+
+
+if __name__ == '__main__':
+    unittest.main()
