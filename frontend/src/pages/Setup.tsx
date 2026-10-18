@@ -11,7 +11,7 @@ import type { Camera, CompileResult, Rule, Severity, Zone } from '../types'
 import { Arrow } from './Landing'
 
 const MAX_CAMERAS = 3
-const SEVERITIES: Severity[] = ['info', 'review', 'urgent']
+const SEVERITIES: Severity[] = ['review', 'urgent']
 
 export default function Setup({ go }: { go: (p: Page) => void }) {
   const saved = loadPolicy()
@@ -77,7 +77,7 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
     setStarting(true)
     setError(null)
     try {
-      await api.putPolicy(text, rules)
+      await api.putPolicy(rules)
       await api.startMonitor()
       savePolicy(text, rules)
       go('watch')

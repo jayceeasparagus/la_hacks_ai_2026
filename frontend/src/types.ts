@@ -1,24 +1,22 @@
-// Mirrors backend/app/models.py. DRAFT: app/models.py and contracts/ are not on main yet,
-// so Camera, Zone, Rule, CompileResult and Verdict copy Person 2's temporary models
-// (backend/policy/contracts.py), TrackFrame copies Person 1's draft, and Alert, RuleState
-// and the WebSocket messages follow the role docs. Update this file when Person 4 lands
-// the real contracts; never rename fields here on our own.
+// Mirrors backend/app/models.py and contracts/api.md (the approved contracts). Never rename
+// fields here on our own: change the contract first, then this file.
 
-export type Severity = 'info' | 'review' | 'urgent'
+export type Severity = 'review' | 'urgent'
 export type RuleType = 'object_attribute' | 'persistent_object'
-export type AttributeName = 'transparent' | 'professional'
+export type AttributeName = 'transparent' | 'professional' | 'hard_hat' | 'safety_vest'
+export type BBox = [number, number, number, number] // x1, y1, x2, y2 normalized 0..1
 
 export interface Camera {
   id: string
   name: string
-  source: string // "webcam:0", a phone stream URL, or a clip path
+  source: string // "webcam:0", "url:<stream>", "clip:<path>", "synthetic:<scene>" or "replay:<tracks>"
 }
 
 export interface Zone {
   id: string
-  name: string
   camera_id: string
-  polygon: [number, number][] // normalized 0..1, origin top-left
+  name: string
+  polygon: [number, number][] // normalized 0..1, origin top-left, at least 3 points
 }
 
 export interface Attribute {
@@ -44,51 +42,64 @@ export interface CompileResult {
   unsupported: string[]
 }
 
-export interface Track {
-  track_id: number
-  class_name: string
-  conf: number
-  bbox: [number, number, number, number] // x1, y1, x2, y2 normalized
-}
-
-export type AlertStatus = 'open' | 'confirmed' | 'dismissed' | 'unclear'
-export type Decision = 'confirm' | 'dismiss' | 'unclear'
+export type AlertStatus = 'open' | 'reviewed'
+export type Decision = 'confirmed' | 'dismissed' | 'unclear'
+export type EvidenceStatus = 'pending' | 'ready' | 'unavailable'
 
 export interface Alert {
   id: string
+  incident_id: string
   camera_id: string
   rule_id: string
   rule_name: string
+  zone_id: string
   track_id: number
+  object_class: string
+  bbox: BBox
+  ts: number // source-relative seconds
+  created_at: string // UTC RFC3339
+  elapsed_seconds: number
   severity: Severity
-  title: string // hedged, e.g. "Possible blocked exit"
+  title: string // hedged, e.g. "Possible exit obstruction"
   observation: string
   confidence: number // 0..1
-  created_at: number // unix seconds
-  evidence_image: string | null // URL under /evidence
-  evidence_clip: string | null
-  bbox: [number, number, number, number] | null
+  rule_snapshot: Rule
+  evidence_status: EvidenceStatus
+  evidence_image_url: string | null
+  evidence_clip_url: string | null
   status: AlertStatus
+  decision: Decision | null
+  decided_at: string | null
 }
 
-// Live progress of a rule on one track, e.g. a bag 3.2 s into a 5 s exit timer.
+export type RulePhase = 'timing' | 'verifying' | 'alerted' | 'compliant' | 'cleared'
+
+// Live progress of a rule on one track, e.g. a bag 3.2 s into a 5 s exit timer. Boxes and
+// labels are drawn on the backend's annotated stream, so states carry no geometry.
 export interface RuleState {
-  rule_id: string
   camera_id: string
+  rule_id: string
   track_id: number
-  class_name: string
+  incident_id: string
+  ts: number
   elapsed_seconds: number
   duration_seconds: number
-  bbox: [number, number, number, number] | null
+  phase: RulePhase
 }
 
 export interface CameraStatus {
   camera_id: string
-  online: boolean
+  status: 'online' | 'offline' | 'connecting'
   fps: number
+  last_frame_ts: number | null
+  error: string | null
 }
 
+// Server -> client messages on /ws: always {type, data}.
 export type WsMessage =
-  | { type: 'state'; camera: CameraStatus; rule_states: RuleState[] }
-  | { type: 'alert'; alert: Alert }
-  | { type: 'alert_update'; alert: Alert }
+  | { type: 'snapshot'; data: { running: boolean; cameras: CameraStatus[]; rule_states: RuleState[] } }
+  | { type: 'camera_status'; data: CameraStatus }
+  | { type: 'state'; data: { camera_id: string; ts: number; rule_states: RuleState[] } }
+  | { type: 'alert'; data: Alert }
+  | { type: 'alert_updated'; data: Alert }
+  | { type: 'monitor_status'; data: { running: boolean } }

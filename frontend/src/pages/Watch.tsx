@@ -2,7 +2,7 @@
 // Click a small feed to make it the big one. Open urgent alerts stay pinned on top.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Page } from '../App'
-import { api } from '../api'
+import { api, createdSeconds } from '../api'
 import AlertCard from '../components/AlertCard'
 import Feed from '../components/Feed'
 import Wordmark from '../components/Wordmark'
@@ -27,17 +27,14 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
   const [snippets, setSnippets] = useState<Record<string, Clip>>({})
   const [, tick] = useState(0)
 
-  useEffect(() => {
-    api.getCameras().then((c) => {
-      setCameras(c)
-      setSelected((s) => s ?? c.find((x) => x.id === 'cam_exit')?.id ?? c[0]?.id ?? null)
-    })
-    // with the mock, evidence is what this browser recorded (the mock's own images are
-    // placeholders), so restore each alert's saved still and any clip from this session
+  // the alert list comes from REST on load and after every reconnect; the socket only adds to it
+  const loadAlerts = useCallback(() => {
     Promise.all([api.getAlerts(), isMockBackend()])
       .then(([list, mock]) => {
         if (!mock) return setAlerts(list)
-        setAlerts(list.map((a) => ({ ...a, evidence_image: loadStill(a.id) })))
+        // with the mock, evidence is what this browser recorded (the mock's own images are
+        // placeholders), so restore each alert's saved still and any clip from this session
+        setAlerts(list.map((a) => ({ ...a, evidence_image_url: loadStill(a.id) })))
         const kept: Record<string, Clip> = {}
         for (const a of list) {
           const clip = loadClip(a.id)
@@ -46,9 +43,17 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
         setSnippets(kept)
       })
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    api.getCameras().then((c) => {
+      setCameras(c)
+      setSelected((s) => s ?? c.find((x) => x.id === 'cam_exit')?.id ?? c[0]?.id ?? null)
+    }).catch(() => {})
+    loadAlerts()
     const t = window.setInterval(() => tick((n) => n + 1), 15000) // refresh "2 min ago"
     return () => window.clearInterval(t)
-  }, [])
+  }, [loadAlerts])
 
   const onAlert = useCallback((incoming: Alert, isUpdate: boolean) => {
     let alert = incoming
@@ -57,10 +62,10 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
       // seconds of footage around it, as evidence
       const frame = captureFrame(alert.camera_id)
       if (frame) {
-        alert = { ...alert, evidence_image: frame }
+        alert = { ...alert, evidence_image_url: frame }
         saveStill(alert.id, frame)
-      } else if (alert.evidence_image?.endsWith('.svg')) {
-        alert = { ...alert, evidence_image: null } // mock placeholder art, not real evidence
+      } else if (alert.evidence_image_url?.endsWith('.svg')) {
+        alert = { ...alert, evidence_image_url: null } // mock placeholder art, not real evidence
       }
       const id = alert.id
       captureSnippet(alert.camera_id).then((frames) => {
@@ -80,12 +85,12 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
     }
     setAlerts((prev) => {
       const old = prev.find((a) => a.id === alert.id)
-      if (old?.evidence_image?.startsWith('data:')) alert = { ...alert, evidence_image: old.evidence_image }
+      if (old?.evidence_image_url?.startsWith('data:')) alert = { ...alert, evidence_image_url: old.evidence_image_url }
       return [alert, ...prev.filter((a) => a.id !== alert.id)]
     })
   }, [])
 
-  const live = useLive(onAlert)
+  const live = useLive(onAlert, loadAlerts)
 
   useEffect(() => {
     if (!toast) return
@@ -104,7 +109,11 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
     try {
       const updated = await api.decide(id, decision)
       await new Promise((r) => window.setTimeout(r, 900))
-      setAlerts((prev) => prev.map((a) => (a.id === id ? { ...updated, evidence_image: a.evidence_image } : a)))
+      setAlerts((prev) =>
+        prev.map((a) =>
+          a.id === id ? { ...updated, evidence_image_url: a.evidence_image_url?.startsWith('data:') ? a.evidence_image_url : updated.evidence_image_url } : a,
+        ),
+      )
     } finally {
       setResolving(({ [id]: _, ...rest }) => rest)
     }
@@ -121,7 +130,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
     .filter((a) => cameraFilter === 'all' || a.camera_id === cameraFilter)
     .sort((a, b) => {
       const pin = Number(b.severity === 'urgent') - Number(a.severity === 'urgent')
-      return tab === 'open' && pin !== 0 ? pin : b.created_at - a.created_at
+      return tab === 'open' && pin !== 0 ? pin : createdSeconds(b) - createdSeconds(a)
     })
 
   const top = tab === 'open' ? visible.find((a) => !resolving[a.id]) : undefined
@@ -131,7 +140,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (!top || e.metaKey || e.ctrlKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return
-      const decision = ({ c: 'confirm', d: 'dismiss', u: 'unclear' } as const)[e.key.toLowerCase() as 'c' | 'd' | 'u']
+      const decision = ({ c: 'confirmed', d: 'dismissed', u: 'unclear' } as const)[e.key.toLowerCase() as 'c' | 'd' | 'u']
       if (decision) decide(top.id, decision)
     }
     window.addEventListener('keydown', onKey)
@@ -141,7 +150,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
   const main = cameras.find((c) => c.id === selected)
   const others = cameras.filter((c) => c.id !== selected)
   const indexOf = (id: string) => cameras.findIndex((c) => c.id === id)
-  const onlineCount = cameras.filter((c) => live.cameras[c.id]?.online).length
+  const onlineCount = cameras.filter((c) => live.cameras[c.id]?.status === 'online').length
 
   return (
     <div className="flex h-full flex-col bg-ink">

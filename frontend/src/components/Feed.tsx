@@ -1,10 +1,11 @@
 // One camera monitor: the live stream with a broadcast-style readout on top.
 // If the stream drops, it shows SIGNAL LOST and keeps retrying without touching other feeds.
+// Boxes and labels are drawn on the backend's annotated stream; this overlay only shows
+// each rule's timer and phase.
 import { useEffect, useState } from 'react'
-import { clock, objectsLabel } from '../format'
-import type { Camera, CameraStatus, Rule, RuleState } from '../types'
+import { clock } from '../format'
+import type { Camera, CameraStatus, Rule, RulePhase, RuleState } from '../types'
 import LiveVideo from './LiveVideo'
-import Marker from './Marker'
 
 interface Props {
   camera: Camera
@@ -16,12 +17,7 @@ interface Props {
   onClick?: () => void
 }
 
-function markerTitle(s: RuleState, rules: Rule[]): string {
-  const object = objectsLabel([s.class_name])
-  const zone = rules.find((r) => r.id === s.rule_id)?.zone ?? s.rule_id
-  const title = zone.includes('exit') ? `${object} blocking the exit` : `${object} in ${zone.replace(/_/g, ' ')}`
-  return title.charAt(0).toUpperCase() + title.slice(1)
-}
+const PHASE_LABEL: Partial<Record<RulePhase, string>> = { verifying: 'checking', alerted: 'flagged', compliant: 'ok' }
 
 export default function Feed({ camera, index, status, ruleStates = [], rules = [], large, onClick }: Props) {
   const [broken, setBroken] = useState(false)
@@ -42,8 +38,8 @@ export default function Feed({ camera, index, status, ruleStates = [], rules = [
     return () => window.clearTimeout(t)
   }, [broken])
 
-  const offline = broken || status?.online === false
-  const alerting = ruleStates.some((s) => s.elapsed_seconds >= s.duration_seconds)
+  const offline = broken || status?.status === 'offline'
+  const alerting = ruleStates.some((s) => s.phase === 'alerted')
   const camNo = String(index + 1).padStart(2, '0')
   const ruleName = (id: string) => {
     const name = rules.find((r) => r.id === id)?.name ?? id.replace(/_/g, ' ')
@@ -78,22 +74,11 @@ export default function Feed({ camera, index, status, ruleStates = [], rules = [
       </div>
 
       {offline && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center">
           <span className="text-[15px] text-text">No signal from {camera.name}</span>
+          {large && status?.error && <span className="text-[13px] text-muted">{status.error}</span>}
         </div>
       )}
-
-      {large &&
-        ruleStates
-          .filter((s) => s.bbox && s.elapsed_seconds >= s.duration_seconds)
-          .map((s) => (
-            <Marker
-              key={`${s.rule_id}-${s.track_id}`}
-              bbox={s.bbox!}
-              title={markerTitle(s, rules)}
-              detail={`${s.elapsed_seconds.toFixed(1)} s, flagged`}
-            />
-          ))}
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 bg-gradient-to-t from-black/70 to-transparent px-4 pb-3 pt-10">
         <span className={`${large ? 'text-[22px]' : 'text-[16px]'} font-medium tracking-[-0.01em] text-text`}>
@@ -102,13 +87,14 @@ export default function Feed({ camera, index, status, ruleStates = [], rules = [
         <div className="flex flex-col items-end gap-2">
           {ruleStates.map((s) => {
             const pct = Math.min(1, s.elapsed_seconds / s.duration_seconds)
-            const reached = pct >= 1
+            const reached = s.phase === 'alerted' || pct >= 1
+            const phase = PHASE_LABEL[s.phase]
             return (
               <div key={`${s.rule_id}-${s.track_id}`} className="chip-in w-56 rounded-md bg-black/70 px-3 py-2 backdrop-blur-sm">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="truncate text-[13px] text-text">{ruleName(s.rule_id)}</span>
                   <span className={`font-mono text-[12px] ${reached ? 'text-accent-soft' : 'text-text'}`}>
-                    {s.elapsed_seconds.toFixed(1)} / {s.duration_seconds.toFixed(0)} s
+                    {phase ?? `${s.elapsed_seconds.toFixed(1)} / ${s.duration_seconds.toFixed(0)} s`}
                   </span>
                 </div>
                 <div className="mt-1.5 h-[3px] w-full rounded bg-line">
