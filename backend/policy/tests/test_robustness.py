@@ -141,6 +141,67 @@ def test_verify_request_uses_minimal_thinking_and_an_image(client):
     assert seen["input"][1]["mime_type"] == "image/jpeg"
 
 
+class FakeVertexClient:
+    """Vertex AI has no /interactions endpoint; only models.generate_content may be used."""
+
+    def __init__(self, reply):
+        self.calls = []
+        self.reply = reply
+        self.models = SimpleNamespace(generate_content=self.generate_content)
+        self.interactions = SimpleNamespace(create=lambda **k: pytest.fail("interactions used in Vertex mode"))
+
+    def generate_content(self, **kwargs):
+        self.calls.append(kwargs)
+        return SimpleNamespace(text=self.reply(kwargs))
+
+
+@pytest.fixture
+def vertex(monkeypatch):
+    monkeypatch.delenv("POLICYLENS_FAKE_LLM", raising=False)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GOOGLE_API_KEY", "AQ.test-key")
+    fake = FakeVertexClient(lambda kwargs: GOOD_DRAFT)
+    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    return fake
+
+
+
+
+def test_vertex_compile_uses_generate_content(vertex):
+    result, info = compile_policy_with_info(DEMO, ZONES)
+    assert info.source == "gemini" and result.model_dump() == EXPECTED_DEMO
+    call = vertex.calls[0]
+    assert call["model"] == "gemini-2.5-flash"
+    assert call["config"].response_mime_type == "application/json"
+    assert "zone_id" in json.dumps(call["config"].response_json_schema)
+    assert "PolicyLens" in call["config"].system_instruction
+    assert llm.status()["mode"] == "vertex"
+
+
+def test_vertex_verify_sends_image_bytes_with_thinking_off(vertex):
+    vertex.reply = lambda kwargs: json.dumps({"answer": "no", "confidence": 0.85, "reason": "black canvas backpack"})
+    verdict = verify_crop(np.full((100, 100, 3), 66, np.uint8), "transparent_bag")
+    assert verdict.answer is False and verdict.reason == "black canvas backpack"
+    call = vertex.calls[0]
+    text_part, image_part = call["contents"]
+    assert "clear (transparent) bag" in text_part.text
+    assert image_part.inline_data.mime_type == "image/jpeg" and image_part.inline_data.data[:2] == b"\xff\xd8"
+    assert call["config"].thinking_config.thinking_budget == 0
+
+
+def test_vertex_express_key_builds_a_vertex_client(monkeypatch):
+    from google import genai
+
+    seen = {}
+    monkeypatch.setattr(llm, "_client", None)
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GOOGLE_API_KEY", "AQ.test-key")
+    monkeypatch.setattr(genai, "Client", lambda **kwargs: seen.update(kwargs) or SimpleNamespace())
+    llm.get_client()
+    assert seen["vertexai"] is True and seen["api_key"] == "AQ.test-key"
+
+
 def test_no_api_key_never_builds_the_sdk_client(monkeypatch):
     """A half-built genai.Client logs asyncio errors on the server; with no key we must not build one."""
     from google import genai
