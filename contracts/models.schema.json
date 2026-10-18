@@ -1,0 +1,830 @@
+{
+  "Camera": {
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "minLength": 1,
+        "title": "Id",
+        "type": "string"
+      },
+      "name": {
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "source": {
+        "minLength": 1,
+        "title": "Source",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "source"
+    ],
+    "title": "Camera",
+    "type": "object"
+  },
+  "Zone": {
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "minLength": 1,
+        "title": "Id",
+        "type": "string"
+      },
+      "camera_id": {
+        "minLength": 1,
+        "title": "Camera Id",
+        "type": "string"
+      },
+      "name": {
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "polygon": {
+        "items": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        "minItems": 3,
+        "title": "Polygon",
+        "type": "array"
+      }
+    },
+    "required": [
+      "id",
+      "camera_id",
+      "name",
+      "polygon"
+    ],
+    "title": "Zone",
+    "type": "object"
+  },
+  "Rule": {
+    "$defs": {
+      "Attribute": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "transparent",
+              "professional"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "expected"
+        ],
+        "title": "Attribute",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "minLength": 1,
+        "title": "Id",
+        "type": "string"
+      },
+      "name": {
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "type": {
+        "enum": [
+          "persistent_object",
+          "object_attribute"
+        ],
+        "title": "Type",
+        "type": "string"
+      },
+      "objects": {
+        "items": {
+          "enum": [
+            "person",
+            "backpack",
+            "handbag",
+            "suitcase",
+            "chair",
+            "camera"
+          ],
+          "type": "string"
+        },
+        "minItems": 1,
+        "title": "Objects",
+        "type": "array"
+      },
+      "zone": {
+        "minLength": 1,
+        "title": "Zone",
+        "type": "string"
+      },
+      "attribute": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Attribute"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "duration_seconds": {
+        "maximum": 600,
+        "minimum": 0.5,
+        "title": "Duration Seconds",
+        "type": "number"
+      },
+      "severity": {
+        "enum": [
+          "review",
+          "urgent"
+        ],
+        "title": "Severity",
+        "type": "string"
+      },
+      "enabled": {
+        "default": true,
+        "title": "Enabled",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "type",
+      "objects",
+      "zone",
+      "duration_seconds",
+      "severity"
+    ],
+    "title": "Rule",
+    "type": "object"
+  },
+  "CompileResult": {
+    "$defs": {
+      "Attribute": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "transparent",
+              "professional"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "expected"
+        ],
+        "title": "Attribute",
+        "type": "object"
+      },
+      "Rule": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "persistent_object",
+              "object_attribute"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "objects": {
+            "items": {
+              "enum": [
+                "person",
+                "backpack",
+                "handbag",
+                "suitcase",
+                "chair",
+                "camera"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Objects",
+            "type": "array"
+          },
+          "zone": {
+            "minLength": 1,
+            "title": "Zone",
+            "type": "string"
+          },
+          "attribute": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Attribute"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "duration_seconds": {
+            "maximum": 600,
+            "minimum": 0.5,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "severity": {
+            "enum": [
+              "review",
+              "urgent"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "objects",
+          "zone",
+          "duration_seconds",
+          "severity"
+        ],
+        "title": "Rule",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "rules": {
+        "items": {
+          "$ref": "#/$defs/Rule"
+        },
+        "title": "Rules",
+        "type": "array"
+      },
+      "warnings": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Warnings",
+        "type": "array"
+      },
+      "unsupported": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Unsupported",
+        "type": "array"
+      }
+    },
+    "title": "CompileResult",
+    "type": "object"
+  },
+  "TrackFrame": {
+    "$defs": {
+      "Track": {
+        "additionalProperties": false,
+        "properties": {
+          "track_id": {
+            "minimum": 0,
+            "title": "Track Id",
+            "type": "integer"
+          },
+          "object_class": {
+            "enum": [
+              "person",
+              "backpack",
+              "handbag",
+              "suitcase",
+              "chair",
+              "camera"
+            ],
+            "title": "Object Class",
+            "type": "string"
+          },
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              }
+            ],
+            "title": "Bbox",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Confidence",
+            "type": "number"
+          }
+        },
+        "required": [
+          "track_id",
+          "object_class",
+          "bbox",
+          "confidence"
+        ],
+        "title": "Track",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "camera_id": {
+        "minLength": 1,
+        "title": "Camera Id",
+        "type": "string"
+      },
+      "ts": {
+        "minimum": 0,
+        "title": "Ts",
+        "type": "number"
+      },
+      "tracks": {
+        "items": {
+          "$ref": "#/$defs/Track"
+        },
+        "title": "Tracks",
+        "type": "array"
+      }
+    },
+    "required": [
+      "camera_id",
+      "ts"
+    ],
+    "title": "TrackFrame",
+    "type": "object"
+  },
+  "Verdict": {
+    "additionalProperties": false,
+    "properties": {
+      "answer": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Answer"
+      },
+      "confidence": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Confidence",
+        "type": "number"
+      },
+      "reason": {
+        "minLength": 1,
+        "title": "Reason",
+        "type": "string"
+      }
+    },
+    "required": [
+      "answer",
+      "confidence",
+      "reason"
+    ],
+    "title": "Verdict",
+    "type": "object"
+  },
+  "RuleState": {
+    "additionalProperties": false,
+    "properties": {
+      "camera_id": {
+        "title": "Camera Id",
+        "type": "string"
+      },
+      "rule_id": {
+        "title": "Rule Id",
+        "type": "string"
+      },
+      "track_id": {
+        "title": "Track Id",
+        "type": "integer"
+      },
+      "incident_id": {
+        "title": "Incident Id",
+        "type": "string"
+      },
+      "ts": {
+        "minimum": 0,
+        "title": "Ts",
+        "type": "number"
+      },
+      "elapsed_seconds": {
+        "minimum": 0,
+        "title": "Elapsed Seconds",
+        "type": "number"
+      },
+      "duration_seconds": {
+        "maximum": 600,
+        "minimum": 0.5,
+        "title": "Duration Seconds",
+        "type": "number"
+      },
+      "phase": {
+        "enum": [
+          "timing",
+          "verifying",
+          "alerted",
+          "compliant",
+          "cleared"
+        ],
+        "title": "Phase",
+        "type": "string"
+      }
+    },
+    "required": [
+      "camera_id",
+      "rule_id",
+      "track_id",
+      "incident_id",
+      "ts",
+      "elapsed_seconds",
+      "duration_seconds",
+      "phase"
+    ],
+    "title": "RuleState",
+    "type": "object"
+  },
+  "Alert": {
+    "$defs": {
+      "Attribute": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "transparent",
+              "professional"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "expected"
+        ],
+        "title": "Attribute",
+        "type": "object"
+      },
+      "Rule": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "persistent_object",
+              "object_attribute"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "objects": {
+            "items": {
+              "enum": [
+                "person",
+                "backpack",
+                "handbag",
+                "suitcase",
+                "chair",
+                "camera"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Objects",
+            "type": "array"
+          },
+          "zone": {
+            "minLength": 1,
+            "title": "Zone",
+            "type": "string"
+          },
+          "attribute": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Attribute"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "duration_seconds": {
+            "maximum": 600,
+            "minimum": 0.5,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "severity": {
+            "enum": [
+              "review",
+              "urgent"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "objects",
+          "zone",
+          "duration_seconds",
+          "severity"
+        ],
+        "title": "Rule",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "title": "Id",
+        "type": "string"
+      },
+      "incident_id": {
+        "title": "Incident Id",
+        "type": "string"
+      },
+      "camera_id": {
+        "title": "Camera Id",
+        "type": "string"
+      },
+      "rule_id": {
+        "title": "Rule Id",
+        "type": "string"
+      },
+      "rule_name": {
+        "title": "Rule Name",
+        "type": "string"
+      },
+      "zone_id": {
+        "title": "Zone Id",
+        "type": "string"
+      },
+      "track_id": {
+        "title": "Track Id",
+        "type": "integer"
+      },
+      "object_class": {
+        "enum": [
+          "person",
+          "backpack",
+          "handbag",
+          "suitcase",
+          "chair",
+          "camera"
+        ],
+        "title": "Object Class",
+        "type": "string"
+      },
+      "bbox": {
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+          {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        ],
+        "title": "Bbox",
+        "type": "array"
+      },
+      "ts": {
+        "minimum": 0,
+        "title": "Ts",
+        "type": "number"
+      },
+      "created_at": {
+        "title": "Created At",
+        "type": "string"
+      },
+      "elapsed_seconds": {
+        "minimum": 0,
+        "title": "Elapsed Seconds",
+        "type": "number"
+      },
+      "severity": {
+        "enum": [
+          "review",
+          "urgent"
+        ],
+        "title": "Severity",
+        "type": "string"
+      },
+      "title": {
+        "title": "Title",
+        "type": "string"
+      },
+      "observation": {
+        "title": "Observation",
+        "type": "string"
+      },
+      "confidence": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Confidence",
+        "type": "number"
+      },
+      "rule_snapshot": {
+        "$ref": "#/$defs/Rule"
+      },
+      "evidence_status": {
+        "default": "pending",
+        "enum": [
+          "pending",
+          "ready",
+          "unavailable"
+        ],
+        "title": "Evidence Status",
+        "type": "string"
+      },
+      "evidence_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Evidence Image Url"
+      },
+      "evidence_clip_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Evidence Clip Url"
+      },
+      "status": {
+        "default": "open",
+        "enum": [
+          "open",
+          "reviewed"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "decision": {
+        "anyOf": [
+          {
+            "enum": [
+              "confirmed",
+              "dismissed",
+              "unclear"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Decision"
+      },
+      "decided_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Decided At"
+      }
+    },
+    "required": [
+      "id",
+      "incident_id",
+      "camera_id",
+      "rule_id",
+      "rule_name",
+      "zone_id",
+      "track_id",
+      "object_class",
+      "bbox",
+      "ts",
+      "created_at",
+      "elapsed_seconds",
+      "severity",
+      "title",
+      "observation",
+      "confidence",
+      "rule_snapshot"
+    ],
+    "title": "Alert",
+    "type": "object"
+  }
+}

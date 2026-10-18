@@ -1,0 +1,2 @@
+# First increment; install into a Python 3.11+ virtual environment.
+pydantic>=2,<3
