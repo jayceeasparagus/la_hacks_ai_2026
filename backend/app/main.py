@@ -6,7 +6,8 @@ Environment:
 - POLICYLENS_DATA_DIR      settings/, alerts.db and evidence/ (default backend/data)
 - POLICYLENS_SEED_DEMO=1   write the demo cameras, zones and rules if none are saved
 - POLICYLENS_DEMO_SOURCES=synthetic   seed the demo cameras with synthetic scenes (no webcam)
-- POLICYLENS_SCENE=<file>  load a demo scene (cameras, zones, rules) at startup, replacing saved ones
+- POLICYLENS_SCENE=<file>  load a demo scene (cameras, zones, rules, cached verdicts) at startup,
+                           replacing saved ones
 - POLICYLENS_FAKE_LLM=1    offline compiler and verifier (no network)
 - POLICYLENS_SOURCE_SPEED  playback speed multiplier for synthetic/replay sources
 """
@@ -31,6 +32,7 @@ from app.models import Alert, Camera, CompileResult, Decision, Model, Rule, Zone
 from app.settings import Settings, SettingsError
 from app.sources import snapshot_image
 from app.render import encode_jpeg
+from app.verdicts import CachedVerdicts
 from app.workers import MonitorManager
 from engine.alerts import utc_now
 from store.db import AlertStore
@@ -109,21 +111,29 @@ def settings_status(error: SettingsError) -> int:
     return 422
 
 
-def seed(settings: Settings) -> None:
+def seed(settings: Settings) -> CachedVerdicts | None:
+    """Load the demo scene or seed the demo configuration; returns the scene's cached verdicts."""
     scene = os.getenv('POLICYLENS_SCENE', '').strip()
     if scene:
         from app.scenes import load_scene
         loaded = load_scene(Path(scene), settings)
         log.info('Loaded demo scene %r from %s', loaded.name, scene)
-        return
+        if loaded.cached_verdicts is None:
+            return None
+        try:
+            return CachedVerdicts.load(Path(loaded.cached_verdicts.file), loaded.cached_verdicts.cameras)
+        except (OSError, ValueError) as error:
+            log.warning('Cached verdicts unavailable (%s); every check goes to the live verifier', error)
+            return None
     if not _env_flag('POLICYLENS_SEED_DEMO'):
-        return
+        return None
     if (os.getenv('POLICYLENS_DEMO_SOURCES', '').strip().lower() == 'synthetic'
             and not settings.path('cameras').exists()):
         cameras = [camera.model_copy(update={'source': SYNTHETIC_DEMO_SOURCES.get(camera.id, camera.source)})
                    for camera in demo_cameras()]
         settings.save_cameras(cameras)
     settings.seed_demo()
+    return None
 
 
 def create_app(data_dir: Path | None = None, *, verifier=None, source_factory=None) -> FastAPI:
@@ -138,13 +148,16 @@ def create_app(data_dir: Path | None = None, *, verifier=None, source_factory=No
     async def lifespan(app: FastAPI):
         root = Path(configured_dir or os.getenv('POLICYLENS_DATA_DIR') or BACKEND_DIR / 'data')
         settings = Settings(root / 'settings')
-        seed(settings)
+        cached_verdicts = seed(settings)
         store = AlertStore(root / 'alerts.db')
-        evidence = EvidenceWriter(root / 'evidence')
+        # A policy applied to the looping demo cameras raises several alerts at once (cached verdicts are
+        # instant); with 4 slots the 5th got no evidence. A pending job copies one frame and shares its clip.
+        evidence = EvidenceWriter(root / 'evidence', max_pending=16)
         broadcaster = Broadcaster()
         broadcaster.bind(asyncio.get_running_loop())
         manager = MonitorManager(settings, store, evidence, broadcaster.publish,
-                                 verifier=verifier, source_factory=source_factory)
+                                 verifier=verifier, source_factory=source_factory,
+                                 cached_verdicts=cached_verdicts)
         app.state.settings, app.state.store, app.state.evidence = settings, store, evidence
         app.state.broadcaster, app.state.manager = broadcaster, manager
         log.info('PolicyLens data directory: %s', root)
@@ -221,7 +234,16 @@ def create_app(data_dir: Path | None = None, *, verifier=None, source_factory=No
 
     @app.put('/api/policy', response_model=RulesBody)
     def put_policy(body: RulesBody, request: Request):
-        return {'rules': save(request, state(request).settings.save_rules, body.rules)}
+        # Rules are the one setting that may change while monitoring: running cameras switch
+        # to the new rules at once and keep their sources (contracts/api.md).
+        manager = state(request).manager
+        with manager._lock:
+            try:
+                rules = state(request).settings.save_rules(body.rules)
+            except SettingsError as error:
+                raise HTTPException(settings_status(error), str(error)) from error
+            manager.apply_rules(rules)
+        return {'rules': rules}
 
     # Monitoring ----------------------------------------------------------------------
 

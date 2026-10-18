@@ -97,3 +97,11 @@ def point_in_polygon(point: Sequence[float], polygon: Sequence[Sequence[float]])
 def bbox_in_zone(bbox: Sequence[float], polygon: Sequence[Sequence[float]]) -> bool:
     """Use the object's bottom-center, rather than any box overlap."""
     return point_in_polygon(bottom_center(bbox), polygon)
+
+
+def is_whole_frame(polygon: Sequence[Sequence[float]], min_area: float = 0.9) -> bool:
+    """True for a zone covering (almost) the whole frame: the camera is judged as a whole, so
+    alerts and the stream don't mention or draw a zone."""
+    vertices = [_coordinates(vertex, 2) for vertex in polygon]
+    area_twice = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(vertices, vertices[1:] + vertices[:1]))
+    return abs(area_twice) / 2 >= min_area

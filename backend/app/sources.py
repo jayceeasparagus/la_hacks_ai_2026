@@ -10,8 +10,11 @@ Source strings:
   (imported lazily, so the server runs without ultralytics).
 - `synthetic:<scenario>` -> engine.fake_tracks scenarios or the local entrance
   scenes below, rendered as images and looped forever at real speed.
-- `replay:<tracks.jsonl>` -> approved TrackFrame JSONL at real speed; ends after the file.
+- `replay:<tracks.jsonl>` -> TrackFrame JSONL (approved, or Person 1's draft from `vision.dump`)
+  at real speed; ends after the file.
 - `replay:<tracks.jsonl>@<video>` -> the same tracks played over the real video they describe.
+- `loop:<tracks.jsonl>[@<video>]` -> the same, looped forever (demo cameras). Track ids stay the
+  same on every loop, so cached verdicts keep matching; `loops` tells the worker to alert once.
 
 Errors never contain the source string: camera URLs may carry credentials.
 `POLICYLENS_SOURCE_SPEED` multiplies playback speed of synthetic and replay sources.
@@ -36,7 +39,8 @@ from app.render import WIDTH, render_scene
 log = logging.getLogger(__name__)
 
 VISION_MISSING = 'vision pipeline not installed (merge person1/vision and install its requirements)'
-UNSUPPORTED = 'unsupported camera source; use webcam:N, url:..., clip:path, synthetic:<scenario> or replay:<file>'
+UNSUPPORTED = ('unsupported camera source; use webcam:N, url:..., clip:path, synthetic:<scenario>, '
+               'replay:<file> or loop:<file>')
 TRACK_ID_STRIDE = 1000  # synthetic loops offset track ids so each loop is a new object
 SNAPSHOT_TIMEOUT = 3.0
 
@@ -122,12 +126,19 @@ def synthetic_scene(name: str, camera_id: str) -> tuple[list[TrackFrame], frozen
 # Played sources -------------------------------------------------------------------
 
 class _PlayedSource:
-    """Shared pacing and rendering for synthetic and replay sources."""
+    """Shared pacing and rendering for synthetic and replay sources.
+
+    Loop sources (demo cameras) stay real time: they play at most 25 frames per second, and
+    when the machine falls more than 1 s behind they skip ahead instead of fast-forwarding.
+    """
 
     BUFFER_SECONDS = 10.0
+    LOOP_MAX_FPS = 25.0
+    LOOP_LATE_SECONDS = 1.0
 
     def __init__(self, camera_id: str, frames: list[TrackFrame], *, title: str,
-                 clear_ids: frozenset[int] = frozenset(), loop: bool, speed: float | None = None):
+                 clear_ids: frozenset[int] = frozenset(), loop: bool, stable_ids: bool = False,
+                 speed: float | None = None):
         if not frames:
             raise SourceError('source has no frames')
         self.camera_id = camera_id
@@ -135,10 +146,13 @@ class _PlayedSource:
         self.fps = 0.0
         self.error: str | None = None
         self.ended = False
+        self.loops = loop and stable_ids  # the same objects come back every loop
         self._frames = frames
+        self._period = frames[-1].ts - frames[0].ts + 0.1
         self._title = title
         self._clear_ids = clear_ids
         self._loop = loop
+        self._stable_ids = stable_ids
         self._speed = speed or source_speed()
         self._stop = threading.Event()
         self._recent: deque[TrackFrame] = deque()
@@ -153,19 +167,25 @@ class _PlayedSource:
         return self.render(self._frames[0])
 
     def frames(self) -> Iterator[tuple[np.ndarray, TrackFrame]]:
-        period = self._frames[-1].ts - self._frames[0].ts + 0.1
+        period = self._period
         start = time.monotonic()
         window_start, window_count = start, 0
         loop = 0
+        last_ts = None
         self.status = 'online'
         while not self._stop.is_set():
             for base in self._frames:
-                offset = loop * period
+                ts = round(base.ts - self._frames[0].ts + loop * period, 6)
+                if self.loops and (
+                        (last_ts is not None and ts - last_ts < 1 / self.LOOP_MAX_FPS - 1e-6)
+                        or start + ts / self._speed - time.monotonic() < -self.LOOP_LATE_SECONDS):
+                    continue
+                last_ts = ts
                 tf = base.model_copy(update={
                     'camera_id': self.camera_id,
-                    'ts': round(base.ts - self._frames[0].ts + offset, 6),
+                    'ts': ts,
                     'tracks': [track.model_copy(update={'track_id': track.track_id + loop * TRACK_ID_STRIDE})
-                               for track in base.tracks] if loop else list(base.tracks),
+                               for track in base.tracks] if loop and not self._stable_ids else list(base.tracks),
                 })
                 delay = start + tf.ts / self._speed - time.monotonic()
                 if delay > 0 and self._stop.wait(delay):
@@ -212,7 +232,7 @@ class SyntheticSource(_PlayedSource):
 
 
 class ReplaySource(_PlayedSource):
-    def __init__(self, camera_id: str, path: str, speed: float | None = None):
+    def __init__(self, camera_id: str, path: str, speed: float | None = None, loop: bool = False):
         from engine.replay import read_frames
         file = Path(path)
         if not file.is_file():
@@ -221,7 +241,8 @@ class ReplaySource(_PlayedSource):
             frames = [tf.model_copy(update={'camera_id': camera_id}) for tf in read_frames(file)]
         except ValueError as error:
             raise SourceError(f'invalid replay file: {error}') from error
-        super().__init__(camera_id, frames, title=f'replay:{file.name}', loop=False, speed=speed)
+        super().__init__(camera_id, frames, title=f'{"loop" if loop else "replay"}:{file.name}',
+                         loop=loop, stable_ids=loop, speed=speed)
 
 
 class VideoReplaySource(ReplaySource):
@@ -229,10 +250,11 @@ class VideoReplaySource(ReplaySource):
 
     Frame k of the video is shown for track time ts = k / video fps (relative to the first track
     frame), so the engine, evidence and stream all see real footage without running a detector.
+    Frames wider than 960 px are scaled down (boxes are normalized, so they still line up).
     """
 
-    def __init__(self, camera_id: str, path: str, video: str, speed: float | None = None):
-        super().__init__(camera_id, path, speed=speed)
+    def __init__(self, camera_id: str, path: str, video: str, speed: float | None = None, loop: bool = False):
+        super().__init__(camera_id, path, speed=speed, loop=loop)
         self._video_path = Path(video)
         capture = cv2.VideoCapture(str(self._video_path))
         if not capture.isOpened():
@@ -245,18 +267,24 @@ class VideoReplaySource(ReplaySource):
         self._images: deque[tuple[float, bytes]] = deque()
 
     def _frame_at(self, ts: float) -> np.ndarray:
-        """Read forward to the frame for `ts`; restarts the reader if time goes backwards."""
-        target = max(0, round((ts - self._frames[0].ts) * self._video_fps))
+        """Read forward to the frame for `ts`; restarts the reader if time goes backwards (or loops)."""
+        local = ts - self._frames[0].ts
+        if self._loop:
+            local %= self._period
+        target = max(0, round(local * self._video_fps))
         if self._capture is None or target < self._index:
             if self._capture is not None:
                 self._capture.release()
             self._capture = cv2.VideoCapture(str(self._video_path))
             self._index, self._image = -1, None
+        if target - self._index > 2 * self._video_fps:  # skipped ahead: seek rather than decode every frame
+            self._capture.set(cv2.CAP_PROP_POS_FRAMES, target)
+            self._index = target - 1
         while self._index < target:
             ok, image = self._capture.read()
             if not ok:
                 break  # past the end of the video: keep showing the last frame
-            self._index, self._image = self._index + 1, image
+            self._index, self._image = self._index + 1, _fit_width(image)
         if self._image is None:
             raise SourceError('replay video has no frames')
         return self._image
@@ -279,7 +307,7 @@ class VideoReplaySource(ReplaySource):
             capture.release()
         if not ok:
             raise SourceError('replay video has no frames')
-        return image
+        return _fit_width(image)
 
     def recent_frames(self, seconds: float) -> list[tuple[float, np.ndarray]]:
         with self._lock:
@@ -297,6 +325,13 @@ class VideoReplaySource(ReplaySource):
             if self._capture is not None:
                 self._capture.release()
                 self._capture = None
+
+
+def _fit_width(image: np.ndarray) -> np.ndarray:
+    h, w = image.shape[:2]
+    if w <= WIDTH:
+        return image
+    return cv2.resize(image, (WIDTH, int(round(h * WIDTH / w))), interpolation=cv2.INTER_AREA)
 
 
 # Vision sources --------------------------------------------------------------------
@@ -386,11 +421,11 @@ def build_source(camera: Camera, multi_camera: bool = False):
         return VisionSource(camera.id, camera.source, multi_camera=multi_camera)
     if kind == 'synthetic':
         return SyntheticSource(camera.id, value.strip())
-    if kind == 'replay':
+    if kind in ('replay', 'loop'):
         tracks, _, video = value.strip().partition('@')
         if video:
-            return VideoReplaySource(camera.id, tracks, video)
-        return ReplaySource(camera.id, tracks)
+            return VideoReplaySource(camera.id, tracks, video, loop=kind == 'loop')
+        return ReplaySource(camera.id, tracks, loop=kind == 'loop')
     raise SourceError(UNSUPPORTED)
 
 
@@ -414,12 +449,12 @@ def _grab(target, result: list) -> None:
 def snapshot_image(camera: Camera, timeout: float = SNAPSHOT_TIMEOUT) -> np.ndarray | None:
     """One frame for a camera that is not being monitored, or None.
 
-    Synthetic and replay sources render their first frame; webcam/url/clip sources
+    Synthetic, replay and loop sources render their first frame; webcam/url/clip sources
     try a one-off OpenCV grab (not the vision pipeline) with a short timeout.
     """
     kind, value = scheme(camera.source)
     try:
-        if kind in ('synthetic', 'replay'):
+        if kind in ('synthetic', 'replay', 'loop'):
             return build_source(camera).first_frame()
         if kind == 'webcam':
             target = int(value)

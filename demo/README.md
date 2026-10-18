@@ -9,6 +9,7 @@ call the API.
 | `lobby.json` | CAVIAR lobby, real video | 3 cameras: an urgent "Possible exit obstruction" alert at 42.8 s, "Possible unattended bag" alerts at 28.2 s and 30.1 s. People walking through never alert. | Nothing: runs today, no detector, no Gemini key |
 | `venue.json` | Pexels | Clear tote passes; a shoulder-mounted video camera gets a review alert; phones don't count | Person 1's vision + Gemini key |
 | `construction.json` | Pexels | Hard-hat and hi-vis-vest checks on each person's crop | Person 1's vision + Gemini key |
+| `site_safety.json` | Pexels, looping | The live policy demo (`/#/demo`): type a policy, it applies to both cameras at once, each person gets gear labels | Nothing: recorded tracks + cached verdicts (Gemini only compiles, with an offline fallback) |
 | `tracking.json` | Pexels | A busy lobby: many anonymous person tracks, zero false bag alerts | Person 1's vision |
 
 Before the scenes needing vision can run, Person 1's `person1/vision` must be merged and its
@@ -37,6 +38,26 @@ would overwrite the ground truth.
 384x288 overhead fisheye footage. So the lobby scene uses ground truth on purpose, and the
 `lobby_exit_walkway_detector` eval row records that miss. For a live demo, film the bag at a
 normal height and distance.
+
+## Live policy demo (`site_safety.json`)
+
+From `backend/`: `POLICYLENS_SCENE=../demo/scenes/site_safety.json uvicorn app.main:app --port 8000`, then
+`cd frontend && npm run dev` and open `http://localhost:5173/#/demo`. The page starts monitoring by
+itself. Type a policy, or click an example, and it compiles, saves and swaps the rules into the running
+cameras (`PUT /api/policy` is allowed while monitoring); the videos keep playing.
+
+- Cameras are `loop:<tracks.jsonl>@<video>` sources: Person 1's `vision.dump` tracks over the real clip,
+  looped forever with the same track ids, at most 25 fps, skipping ahead if the machine falls behind.
+  A looping camera alerts once per rule and track for each applied policy, not on every loop.
+- Each camera has one whole-frame zone, so there are no zones to draw or name: every rule covers every
+  camera, alerts don't mention a zone, and the stream draws no zone outline.
+- Gear checks come from `cached_verdicts` (`ppe_verdicts.json`, real Gemini answers keyed by clip, track
+  id and check) before any live call. If you change a clip or its tracks, check that every track that can
+  reach the 1 s threshold is cached: the engine bridges detection gaps of up to 1 s, so a track with only
+  9 frames spread over more than a second still gets verified (construction track 26 did). Missing ones
+  go to live Gemini, or become "Manual review needed" offline.
+- Labels on the stream are neutral: "Hard hat: yes" (green), "not seen" (amber), "unclear" or
+  "checking" (gray).
 
 ## Run a scene
 

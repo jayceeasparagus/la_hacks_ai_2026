@@ -9,7 +9,7 @@ load_dotenv()
 
 
 OFFLINE_CLEARED = ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_API_KEY", "GEMINI_API_KEY", "GEMINI_MODEL",
-                   "GEMINI_VERIFY_MODEL", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION")
+                   "GEMINI_VERIFY_MODEL", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "POLICYLENS_VERTEX_LOCATION")
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "live: calls the real Gemini API (run with -m live; needs Gemini credentials)")

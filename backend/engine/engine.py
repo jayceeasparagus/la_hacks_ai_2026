@@ -17,7 +17,7 @@ from uuid import uuid4
 from app.models import Alert, Rule, RuleState, Track, TrackFrame, Verdict, Zone
 from engine.alerts import attribute_alert, manual_review_alert, obstruction_alert, utc_now
 from engine.crop import crop
-from engine.zones import bbox_in_zone, validate_polygon
+from engine.zones import bbox_in_zone, is_whole_frame, validate_polygon
 from verify.prompts import CHECK_FOR_ATTRIBUTE
 
 if TYPE_CHECKING:
@@ -38,6 +38,14 @@ def bbox_iou(a, b) -> float:
     area_a = (a[2] - a[0]) * (a[3] - a[1])
     area_b = (b[2] - b[0]) * (b[3] - b[1])
     return intersection / (area_a + area_b - intersection)
+
+
+def crop_score(track: Track) -> float:
+    """How good a view of the object this is: bigger and more confident is better, and views near
+    the frame center (the camera's focus) count up to twice as much as views at the edge."""
+    x1, y1, x2, y2 = track.bbox
+    offset = ((((x1 + x2) / 2 - 0.5) ** 2 + ((y1 + y2) / 2 - 0.5) ** 2) ** 0.5) / 0.5 ** 0.5
+    return (x2 - x1) * (y2 - y1) * track.confidence * (1 - 0.5 * min(1.0, offset))
 
 
 def _default_verifier(image: 'np.ndarray | None', check: str) -> Verdict:
@@ -73,6 +81,7 @@ class _Incident:
     best_track: Track | None = None
     best_ts: float = 0
     best_frame: 'np.ndarray | None' = None
+    verdict: Verdict | None = None  # the attribute check's answer, once known
 
     def restart(self, entered: float | None) -> None:
         """Restart a pending timer; earlier observations no longer count."""
@@ -88,7 +97,7 @@ class _Incident:
 class _Job:
     rule: Rule
     incident: _Incident
-    zone_name: str
+    zone_name: str | None  # None when the zone is the whole frame
     session_id: str
     crop: 'np.ndarray | None'
     check: str
@@ -106,7 +115,8 @@ class RuleEngine:
     Each instance belongs to one camera session and is updated by one worker.
     Configuration is copied so editing a caller's models cannot mutate a live rule.
     Attribute verdicts arrive asynchronously; `update()` polls them and `drain()`
-    waits for the rest.
+    waits for the rest. `verdict_lookup(track_id, check)` may answer a check from a
+    cache of known verdicts (demo footage) before any crop is sent to the verifier.
     """
 
     def __init__(self, camera_id: str, zones: list[Zone], rules: list[Rule], *,
@@ -115,7 +125,8 @@ class RuleEngine:
                  verifier: Callable[['np.ndarray | None', str], Verdict] | None = None,
                  executor: Executor | None = None,
                  monotonic: Callable[[], float] = time.monotonic,
-                 scheduler=None, evidence_writer=None):
+                 scheduler=None, evidence_writer=None,
+                 verdict_lookup: Callable[[int, str], Verdict | None] | None = None):
         if not camera_id:
             raise ValueError('camera_id is required')
         if len({zone.id for zone in zones}) != len(zones):
@@ -134,6 +145,9 @@ class RuleEngine:
         self.rules = []
         for zone in zones:
             validate_polygon(zone.polygon)
+        # Alerts name the zone, except when it is the whole frame (the camera is judged as a whole).
+        self._places = {zone.id: None if is_whole_frame(zone.polygon) else zone.name for zone in zones}
+        self.verdict_lookup = verdict_lookup
         for rule in rules:
             if rule.zone not in self.zones:
                 raise ValueError(f'Unknown zone: {rule.zone}')
@@ -272,7 +286,7 @@ class RuleEngine:
             job.future = Future()
             job.future.set_exception(exc)
 
-    def _start_verification(self, rule: Rule, incident: _Incident, zone_name: str) -> None:
+    def _start_verification(self, rule: Rule, incident: _Incident, zone_name: str | None) -> None:
         image = (None if incident.best_frame is None
                  else crop(incident.best_frame, incident.best_track.bbox))
         job = _Job(rule=rule, incident=incident, zone_name=zone_name,
@@ -280,7 +294,13 @@ class RuleEngine:
                    check=CHECK_FOR_ATTRIBUTE[rule.attribute.name],
                    threshold_ts=self._last_ts,
                    evidence_frames=self._buffer.snapshot(self._last_ts) if self._buffer else [])
-        self._submit(job)
+        known = (self.verdict_lookup(incident.best_track.track_id, job.check)
+                 if self.verdict_lookup is not None else None)
+        if known is not None:
+            job.future = Future()  # resolved at the next poll, without calling the verifier
+            job.future.set_result(known)
+        else:
+            self._submit(job)
         self._jobs.append(job)
 
     def _poll(self, ts: float) -> list[Alert]:
@@ -324,6 +344,7 @@ class RuleEngine:
         if self.scheduler is not None:
             ts = job.threshold_ts
         frame, incident.best_frame = incident.best_frame, None
+        incident.verdict = verdict
         if verdict.answer is not None and verdict.answer == rule.attribute.expected:
             incident.phase = 'compliant'
             return None
@@ -412,8 +433,7 @@ class RuleEngine:
                 incident.confidence_sum += track.confidence
                 incident.observations += 1
                 if attribute and incident.phase == 'timing':
-                    x1, y1, x2, y2 = track.bbox
-                    score = (x2 - x1) * (y2 - y1) * track.confidence
+                    score = crop_score(track)
                     if score > incident.best_score:
                         incident.best_score = score
                         incident.best_track = track
@@ -423,14 +443,14 @@ class RuleEngine:
                 if incident.phase == 'timing' and elapsed >= rule.duration_seconds - 1e-9:
                     if attribute:
                         incident.phase = 'verifying'
-                        self._start_verification(rule, incident, zone.name)
+                        self._start_verification(rule, incident, self._places[zone.id])
                     else:
                         incident.phase = 'alerted'
                         alert = obstruction_alert(
                             incident_id=incident.id, camera_id=self.camera_id, rule=rule,
                             track=track, ts=tf.ts, elapsed=elapsed,
                             confidence=incident.confidence_sum / incident.observations,
-                            zone_name=zone.name, created_at=self.clock(),
+                            zone_name=self._places[zone.id], created_at=self.clock(),
                         )
                         self._remember_frame(alert.id, None if frame is None else frame.copy())
                         self._capture_evidence(alert, frame, tf.ts)
@@ -506,3 +526,8 @@ class RuleEngine:
         return [self._state(rule, incident, self._last_ts or 0.0, incident.phase)
                 for rule in self.rules for key, incident in self._incidents.items()
                 if key[0] == rule.id]
+
+    def verdicts(self) -> dict[tuple[str, int], Verdict]:
+        """Attribute answers of open incidents, keyed by (rule id, current track id)."""
+        return {key: incident.verdict for key, incident in self._incidents.items()
+                if incident.verdict is not None}

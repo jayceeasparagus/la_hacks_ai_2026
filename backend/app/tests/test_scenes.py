@@ -1,6 +1,7 @@
 """Demo scenes and tracks replayed over real video, with a tiny generated clip."""
 
 import json
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -53,6 +54,60 @@ class VideoReplayTests(unittest.TestCase):
             self.assertEqual(recent[-1][1].shape, (120, 160, 3))
             self.assertEqual(source.first_frame().shape, (120, 160, 3))
 
+    def test_loop_source_wraps_the_video_and_keeps_track_ids(self):
+        with TemporaryDirectory() as tmp:
+            clip, tracks = Path(tmp) / 'clip.avi', Path(tmp) / 'clip.tracks.jsonl'
+            write_clip(clip)
+            write_tracks(tracks)
+            source = build_source(Camera(id='cam_x', name='X', source=f'loop:{tracks}@{clip}'))
+            self.assertIsInstance(source, VideoReplaySource)
+            self.assertTrue(source.loops)
+            source._speed = 1000
+            seen = []
+            for image, tf in source.frames():
+                seen.append((image, tf))
+                if len(seen) == 75:  # two and a half loops of 30 frames
+                    source.stop()
+            self.assertFalse(source.ended)
+            times = [tf.ts for _, tf in seen]
+            self.assertEqual(times, sorted(set(times)))  # strictly increasing across loops
+            self.assertEqual({t.track_id for _, tf in seen for t in tf.tracks}, {1})
+            # frame 30 is the first frame of the second loop: the video starts over
+            self.assertAlmostEqual(float(seen[30][0].mean()), 0, delta=4)
+            self.assertAlmostEqual(float(seen[40][0].mean()), 80, delta=4)
+
+    def test_loop_source_plays_at_most_25_fps(self):
+        with TemporaryDirectory() as tmp:
+            tracks = Path(tmp) / 'clip.tracks.jsonl'
+            write_tracks(tracks, frames=50, fps=50.0)
+            source = build_source(Camera(id='cam_x', name='X', source=f'loop:{tracks}'))
+            source._speed = 1000
+            times = []
+            for _, tf in source.frames():
+                times.append(tf.ts)
+                if len(times) == 40:
+                    source.stop()
+            gaps = [round(b - a, 3) for a, b in zip(times, times[1:])]
+            self.assertTrue(all(gap >= 0.04 for gap in gaps), gaps)
+
+    def test_loop_source_skips_ahead_when_late_instead_of_fast_forwarding(self):
+        with TemporaryDirectory() as tmp:
+            tracks = Path(tmp) / 'clip.tracks.jsonl'
+            write_tracks(tracks, frames=30, fps=10.0)
+            source = build_source(Camera(id='cam_x', name='X', source=f'loop:{tracks}'))
+            source._speed = 10  # one 3 s loop takes 0.3 s
+            source.LOOP_LATE_SECONDS = 0.05
+            times = []
+            for _, tf in source.frames():
+                times.append(tf.ts)
+                if len(times) == 5:
+                    time.sleep(0.25)  # the machine stalls for 2.5 s of footage
+                if len(times) == 15:
+                    source.stop()
+            gaps = [round(b - a, 3) for a, b in zip(times, times[1:])]
+            self.assertGreater(gaps[4], 1.0)  # frames that were already late were skipped
+            self.assertTrue(all(gap == 0.1 for gap in gaps[:4]), gaps)
+
     def test_missing_video_is_a_source_error(self):
         with TemporaryDirectory() as tmp:
             tracks = Path(tmp) / 'clip.tracks.jsonl'
@@ -99,6 +154,23 @@ class SceneTests(unittest.TestCase):
                 self.assertTrue(all(z.camera_id in camera_ids for z in scene.zones))
                 self.assertTrue(all(r.zone in zone_ids for r in scene.rules))
                 self.assertTrue(scene.policy and scene.credits)
+
+
+class SiteSafetySceneTests(unittest.TestCase):
+    def test_scene_loops_two_whole_frame_cameras_with_cached_verdicts(self):
+        from app.verdicts import CachedVerdicts
+        from policy.capability import whole_frame_cameras
+        scene = read_scene(ROOT / 'demo' / 'scenes' / 'site_safety.json')
+        self.assertEqual([c.source.split(':', 1)[0] for c in scene.cameras], ['loop', 'loop'])
+        self.assertTrue(whole_frame_cameras(scene.zones))
+        self.assertEqual(scene.rules, [])
+        cached = CachedVerdicts.load(Path(scene.cached_verdicts.file), scene.cached_verdicts.cameras)
+        hat = cached.get('cam_site', 19, 'hard_hat')
+        self.assertIs(hat.answer, False)
+        self.assertIs(cached.get('cam_site', 1, 'safety_vest').answer, True)
+        self.assertIsNone(cached.get('cam_site', 999, 'hard_hat'))  # unknown: ask the live verifier
+        self.assertIsNone(cached.lookup('cam_other'))
+        self.assertIs(cached.lookup('cam_warehouse')(10, 'hard_hat').answer, False)
 
 
 class EvidenceSizeTests(unittest.TestCase):

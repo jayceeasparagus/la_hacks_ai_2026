@@ -23,6 +23,11 @@ def _article(word: str) -> str:
     return 'An' if word[0].lower() in 'aeiou' else 'A'
 
 
+def _in_zone(zone_name: str | None) -> str:
+    """' in the X zone', or nothing when the zone is the whole frame (zone_name None)."""
+    return f' in the {zone_name} zone' if zone_name else ''
+
+
 def _reason(verdict: Verdict) -> str:
     return verdict.reason.strip().rstrip('.') or 'no reason given'
 
@@ -43,21 +48,21 @@ def _alert(*, incident_id: str, camera_id: str, rule: Rule, track: Track, ts: fl
 
 def obstruction_alert(*, incident_id: str, camera_id: str, rule: Rule,
                       track: Track, ts: float, elapsed: float, confidence: float,
-                      zone_name: str, created_at: str) -> Alert:
+                      zone_name: str | None, created_at: str) -> Alert:
     """A persistent object stayed in its zone; exit zones keep the demo wording."""
-    is_exit = any('exit' in value.lower() for value in (rule.id, rule.zone, zone_name))
+    is_exit = any('exit' in value.lower() for value in (rule.id, rule.zone, zone_name or ''))
     return _alert(
         incident_id=incident_id, camera_id=camera_id, rule=rule, track=track, ts=ts,
         elapsed=elapsed, confidence=confidence, created_at=created_at,
         title='Possible exit obstruction' if is_exit else f'Possible {rule.name.lower()}',
-        observation=(f'{_article(track.object_class)} {track.object_class} was observed '
-                     f'inside the {zone_name} zone for {elapsed:.1f} seconds, '
+        observation=(f'{_article(track.object_class)} {track.object_class} was observed'
+                     f'{_in_zone(zone_name) or " in view"} for {elapsed:.1f} seconds, '
                      'allowing brief detection gaps.'),
     )
 
 
 def attribute_alert(*, incident_id: str, camera_id: str, rule: Rule, track: Track,
-                    ts: float, elapsed: float, verdict: Verdict, zone_name: str,
+                    ts: float, elapsed: float, verdict: Verdict, zone_name: str | None,
                     created_at: str) -> Alert:
     """The verifier's answer differs from the attribute value the rule expects."""
     noun, phrase = ATTRIBUTE_TERMS[rule.attribute.name]
@@ -70,13 +75,13 @@ def attribute_alert(*, incident_id: str, camera_id: str, rule: Rule, track: Trac
         incident_id=incident_id, camera_id=camera_id, rule=rule, track=track, ts=ts,
         elapsed=elapsed, confidence=verdict.confidence, created_at=created_at,
         title=title,
-        observation=(f'{_article(track.object_class)} {track.object_class} in the '
-                     f'{zone_name} zone {looks} {phrase} (verifier: {_reason(verdict)}).'),
+        observation=(f'{_article(track.object_class)} {track.object_class}{_in_zone(zone_name)} '
+                     f'{looks} {phrase} (verifier: {_reason(verdict)}).'),
     )
 
 
 def manual_review_alert(*, incident_id: str, camera_id: str, rule: Rule, track: Track,
-                        ts: float, elapsed: float, verdict: Verdict, zone_name: str,
+                        ts: float, elapsed: float, verdict: Verdict, zone_name: str | None,
                         created_at: str) -> Alert:
     """The verifier could not tell; a person has to look, never a confirmed violation."""
     _, phrase = ATTRIBUTE_TERMS[rule.attribute.name]
@@ -84,6 +89,6 @@ def manual_review_alert(*, incident_id: str, camera_id: str, rule: Rule, track: 
         incident_id=incident_id, camera_id=camera_id, rule=rule, track=track, ts=ts,
         elapsed=elapsed, confidence=verdict.confidence, created_at=created_at,
         title='Manual review needed',
-        observation=(f"Couldn't tell whether the {track.object_class} in the {zone_name} "
-                     f'zone is {phrase} ({_reason(verdict)}).'),
+        observation=(f"Couldn't tell whether the {track.object_class}{_in_zone(zone_name)} "
+                     f'is {phrase} ({_reason(verdict)}).'),
     )
