@@ -17,7 +17,7 @@ from engine.verification import StubVerifier, VerificationScheduler
 
 
 def replay_clip(video_path, frames, *, zones=None, rules=None,
-                scheduler=None, evidence_writer=None):
+                scheduler=None, evidence_writer=None, on_alert=None):
     """Use existing tracks, not a detector. Caller owns shared worker lifetimes."""
     if (zones is None) != (rules is None):
         raise ValueError('Provide both zones and rules, or neither')
@@ -45,11 +45,15 @@ def replay_clip(video_path, frames, *, zones=None, rules=None,
             engine.clock = lambda value=created_at: value
             for alert in engine.update(image, tf)[1]:
                 alerts[alert.id] = alert
+                if on_alert is not None:
+                    on_alert(alert)
             for result in engine.poll_evidence():
                 alerts[result.alert_id] = result.apply(alerts[result.alert_id])
         if engine is not None:
             for alert in engine.drain_verifications():
                 alerts[alert.id] = alert
+                if on_alert is not None:
+                    on_alert(alert)
             for result in engine.drain_evidence():
                 alerts[result.alert_id] = result.apply(alerts[result.alert_id])
         return list(alerts.values())
