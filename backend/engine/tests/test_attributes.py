@@ -160,3 +160,35 @@ class AttributeEngineTests(unittest.TestCase):
                 self.assertEqual(engine.update(image, self.frame(tick / 10,
                     object_class='chair'))[1], [])
             self.assertEqual(stub.calls, [])
+
+    def test_attribute_tracking_id_recovery_does_not_repeat_check(self):
+        stub = StubVerifier({'transparent_bag': Verdict(answer=False, confidence=0.9, reason='test')})
+        with VerificationScheduler(stub) as scheduler:
+            engine = self.engine(scheduler)
+            image = np.zeros((200, 300, 3), np.uint8)
+            alerts = []
+            for tick in range(26):
+                alerts.extend(engine.update(image, self.frame(tick / 10,
+                    track_id=1 if tick < 6 else 2))[1])
+            alerts.extend(engine.drain_verifications())
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(stub.calls, ['transparent_bag'])
+
+    def test_two_camera_engines_do_not_share_track_results(self):
+        stub = StubVerifier({'transparent_bag': Verdict(answer=False, confidence=0.9, reason='test')})
+        with VerificationScheduler(stub) as scheduler:
+            a = self.engine(scheduler)
+            zone = demo_zones()[0].model_copy(update={'camera_id': 'other'})
+            b = RuleEngine('other', [zone], [demo_rules()[0]], scheduler=scheduler,
+                           session_id='test')
+            image = np.zeros((200, 300, 3), np.uint8)
+            alerts = []
+            for tick in range(11):
+                frame = self.frame(tick / 10)
+                alerts.extend(a.update(image, frame)[1])
+                alerts.extend(b.update(image, frame.model_copy(update={'camera_id': 'other'}))[1])
+            alerts.extend(a.drain_verifications())
+            alerts.extend(b.drain_verifications())
+        self.assertEqual(len(alerts), 2)
+        self.assertEqual({alert.camera_id for alert in alerts}, {'cam_entrance', 'other'})
+        self.assertEqual(len(stub.calls), 2)

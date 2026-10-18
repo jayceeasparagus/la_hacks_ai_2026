@@ -52,6 +52,7 @@ class _Check:
     created_at: str
     ticket: Ticket | None
     evidence_frames: list
+    queued_at: float
 
 
 class RuleEngine:
@@ -270,7 +271,7 @@ class RuleEngine:
         self._checks[incident.id] = _Check(
             incident.id, rule, (incident.best.track if incident.best else incident.track),
             incident.best, ts, elapsed, self.clock(), ticket,
-            self._buffer.snapshot(ts) if self._buffer is not None else [])
+            self._buffer.snapshot(ts) if self._buffer is not None else [], time.monotonic())
 
     def poll_verifications(self) -> list[Alert]:
         """Collect results even when video is paused; does not advance source time."""
@@ -281,6 +282,8 @@ class RuleEngine:
             if verdict is None:
                 continue
             del self._checks[incident_id]
+            log.info('Attribute result camera=%s rule=%s candidate_to_result_ms=%.1f',
+                     self.camera_id, check.rule.id, (time.monotonic() - check.queued_at) * 1000)
             active = next((incident for incident in self._incidents.values()
                            if incident.id == incident_id), None)
             violation = verdict.answer is None or verdict.answer != check.rule.attribute.expected
