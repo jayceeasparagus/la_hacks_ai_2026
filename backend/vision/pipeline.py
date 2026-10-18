@@ -42,12 +42,13 @@ def crop(image: np.ndarray, bbox, pad: float = 0.15) -> np.ndarray:
 
 class VisionPipeline:
     def __init__(self, camera_id: str, source: str, width: int | None = None, imgsz: int = 640,
-                 realtime: bool = False, multi_camera: bool = False):
-        """width defaults to 1280, or 960 when multi_camera is True."""
+                 realtime: bool = False, multi_camera: bool = False, detector: Detector | None = None):
+        """width defaults to 1280, or 960 when multi_camera is True.
+        detector: pass one to override prompts (e.g. testing extra classes)."""
         self.camera_id = camera_id
         self.source = source
         width = width or (MULTI_CAMERA_WIDTH if multi_camera else SINGLE_CAMERA_SIZE[0])
-        self.detector = Detector(imgsz=imgsz)
+        self.detector = detector or Detector(imgsz=imgsz)
         self.capture = Capture(source, width=width, realtime=realtime)
         self.fps = 0.0  # processed frames per second, measured over ~1 s windows
         self._buffer: deque[tuple[float, bytes]] = deque()
