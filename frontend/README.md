@@ -1,4 +1,4 @@
-# PolicyLens frontend
+# WatchDog frontend
 
 Vite + React + TypeScript + Tailwind. Three screens: landing, setup (cameras, zones, policy,
 rule review) and watch (live feeds plus the alert sidebar).

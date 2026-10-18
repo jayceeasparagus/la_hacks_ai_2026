@@ -1,10 +1,10 @@
-# PolicyLens
+# WatchDog
 
 Program cameras with a venue policy written in plain English. Local detection,
 tracking, zones and duration checks produce evidence-backed alerts for human
 review. Gemini compiles policies and verifies selected uncertain crops.
 
-Inspired by HawkWatch's camera-to-incident product loop; PolicyLens focuses on
+Inspired by HawkWatch's camera-to-incident product loop; WatchDog focuses on
 user-defined policies, deterministic temporal rules and operator decisions.
 
 ## What works in this checkout
@@ -157,7 +157,7 @@ Camera -> vision pipeline (YOLO-World + ByteTrack) -> contract adapter -> rule e
   crowded scenes.
 - **Attribute verdicts are hedged and always go to a human.** "Unclear" becomes a
   manual-review alert, never a confirmed violation.
-- **PolicyLens never identifies people.** Each person is an anonymous track within
+- **WatchDog never identifies people.** Each person is an anonymous track within
   one camera, with no face recognition and no cross-camera re-identification.
 - **Evidence clips** use H.264 when the platform's OpenCV build supports it, and
   otherwise fall back to `mp4v`, which some browsers can't play.
