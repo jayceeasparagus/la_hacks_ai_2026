@@ -141,6 +141,22 @@ def test_verify_request_uses_minimal_thinking_and_an_image(client):
     assert seen["input"][1]["mime_type"] == "image/jpeg"
 
 
+def test_no_api_key_never_builds_the_sdk_client(monkeypatch):
+    """A half-built genai.Client logs asyncio errors on the server; with no key we must not build one."""
+    from google import genai
+
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_USE_VERTEXAI", "POLICYLENS_FAKE_LLM"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(llm, "_client", None)
+    monkeypatch.setattr(genai, "Client", lambda *a, **k: pytest.fail("genai.Client built without credentials"))
+    with pytest.raises(llm.GeminiUnavailable):
+        llm.get_client()
+    assert llm.status()["api_key_set"] is False
+    verdict = verify_crop(np.full((100, 100, 3), 120, np.uint8), "transparent_bag")
+    assert (verdict.answer, verdict.reason) == (None, "verification unavailable")
+    assert compile_policy_with_info(DEMO, ZONES)[1].source == "fallback"
+
+
 def test_sdk_retries_are_off():
     from google.genai._gaos.google_genai import _translate_retry_config
 

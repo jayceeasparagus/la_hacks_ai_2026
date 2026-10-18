@@ -51,10 +51,20 @@ def get_client():
     global _client
     with _client_lock:
         if _client is None:
+            if not credentials_configured():
+                # Don't let the SDK fail halfway through its constructor: the half-built client's
+                # cleanup later logs "Task exception was never retrieved" on the server's event loop.
+                raise GeminiUnavailable('GEMINI_API_KEY is not set')
             from google import genai
 
             _client = genai.Client(http_options=http_options())
         return _client
+
+
+def credentials_configured() -> bool:
+    """An API key, or Vertex AI mode (which authenticates with Google Cloud credentials)."""
+    vertex = os.getenv('GOOGLE_GENAI_USE_VERTEXAI', '').strip().lower() in ('1', 'true', 'yes')
+    return bool(os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY') or vertex)
 
 
 def http_options():
@@ -158,7 +168,7 @@ def status() -> dict:
         "mode": "fake" if fake_mode() else "gemini",
         "policy_model": policy_model(),
         "verify_model": verify_model(),
-        "api_key_set": bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
+        "api_key_set": credentials_configured(),
         "available": available(),
     }
 
