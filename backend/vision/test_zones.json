@@ -1,0 +1,82 @@
+{
+  "gate_man_ticket": [
+    {"name": "gate_lane", "kind": "entrance", "polygon": [[0.22, 0.55], [0.78, 0.55], [0.85, 0.98], [0.15, 0.98]],
+     "note": "floor of the single lane between the turnstiles; people far behind the gate are excluded"}
+  ],
+  "gate_pass_cards": [
+    {"name": "turnstile_front", "kind": "entrance", "polygon": [[0.0, 0.55], [0.8, 0.55], [0.8, 1.0], [0.0, 1.0]],
+     "note": "people standing at the near side of the turnstiles"}
+  ],
+  "gate_woman_metro": [
+    {"name": "whole_frame", "kind": "entrance", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+     "note": "handheld camera following one person: a fixed zone is meaningless, so the whole frame counts"}
+  ],
+  "gate_subway_turnstile": [
+    {"name": "turnstile_row", "kind": "entrance", "polygon": [[0.0, 0.62], [1.0, 0.62], [1.0, 1.0], [0.0, 1.0]],
+     "note": "people at the near side of the turnstile row; people behind the gates are excluded"}
+  ],
+  "gate_nyc_turnstile": [
+    {"name": "whole_frame", "kind": "entrance", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+     "note": "handheld camera walking through the gates: whole frame counts"}
+  ],
+  "ppe_workers_walking": [
+    {"name": "whole_frame", "kind": "entrance", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+     "note": "camera follows two workers from behind: whole frame counts"}
+  ],
+  "ppe_group_walking": [
+    {"name": "site_path_near", "kind": "entrance", "polygon": [[0.1, 0.55], [0.9, 0.55], [0.9, 1.0], [0.1, 1.0]],
+     "note": "near half of the path, so workers are checked once they are close enough to see"}
+  ],
+  "ppe_worker_entering": [
+    {"name": "whole_frame", "kind": "entrance", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+     "note": "close handheld shot of one worker: whole frame counts"}
+  ],
+  "stadium_entrance_gameday": [
+    {"name": "front_of_crowd", "kind": "entrance", "polygon": [[0.0, 0.75], [1.0, 0.75], [1.0, 1.0], [0.0, 1.0]],
+     "note": "dense crowd (not a choke point): only the nearest people, to show how a zone limits requests"}
+  ],
+  "stadium_fans_rabat": [
+    {"name": "front_of_crowd", "kind": "entrance", "polygon": [[0.0, 0.8], [1.0, 0.8], [1.0, 1.0], [0.0, 1.0]],
+     "note": "crowd walking to the stadium: only the nearest people"}
+  ],
+  "wembley_station_entrance": [
+    {"name": "station_plaza", "kind": "entrance", "polygon": [[0.05, 0.5], [0.95, 0.5], [0.95, 0.8], [0.05, 0.8]],
+     "note": "far, night-time plaza in front of the station: expect many 'too small' skips"}
+  ],
+  "hotel_luggage_enter": [
+    {"name": "lobby_entry", "kind": "entrance", "polygon": [[0.0, 0.5], [1.0, 0.5], [1.0, 1.0], [0.0, 1.0]],
+     "note": "people walking in toward the camera"},
+    {"name": "exit_standin_right", "kind": "exit", "polygon": [[0.7, 0.45], [1.0, 0.45], [1.0, 0.75], [0.7, 0.75]],
+     "note": "STAND-IN exit zone where a suitcase is wheeled by its owner: the timer should pause (carried), so no exit request expected"}
+  ],
+  "airport_couple_enter": [
+    {"name": "terminal_entry", "kind": "entrance", "polygon": [[0.0, 0.5], [1.0, 0.5], [1.0, 1.0], [0.0, 1.0]],
+     "note": "couple walking into the terminal"},
+    {"name": "exit_standin_left", "kind": "exit", "polygon": [[0.0, 0.65], [0.42, 0.65], [0.42, 0.9], [0.0, 0.9]],
+     "note": "STAND-IN exit zone around a chair that stays put for ~11 s: an exit confirmation IS expected"}
+  ],
+  "airport_checkpoint_walkthrough": [
+    {"name": "checkpoint_lanes_near", "kind": "entrance", "polygon": [[0.0, 0.65], [0.95, 0.65], [0.95, 1.0], [0.0, 1.0]],
+     "note": "busy checkpoint: only the near part of the lanes"}
+  ],
+  "airport_checkpoint_busy": [
+    {"name": "corridor_exit", "kind": "entrance", "polygon": [[0.25, 0.6], [0.85, 0.6], [0.95, 1.0], [0.15, 1.0]],
+     "note": "people walking toward the camera out of the checkpoint corridor: a natural choke point"}
+  ],
+  "concert_fans_phones": [
+    {"name": "whole_frame", "kind": "entrance", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+     "note": "dark concert crowd, not a choke point: included to show what dark crops look like"}
+  ],
+  "concert_man_filming": [
+    {"name": "whole_frame", "kind": "entrance", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+     "note": "one man filming with a phone: pro_camera should come back 'no'"}
+  ],
+  "street_smartphones": [
+    {"name": "whole_frame", "kind": "entrance", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+     "note": "street, people with phones: not a choke point"}
+  ],
+  "walking_phone_sidewalk": [
+    {"name": "whole_frame", "kind": "entrance", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+     "note": "handheld camera following one person with a phone and a bag"}
+  ]
+}

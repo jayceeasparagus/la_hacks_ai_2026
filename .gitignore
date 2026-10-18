@@ -17,6 +17,9 @@ backend/policy/.cache/
 clips/*
 !clips/SOURCES.md
 
+# Model weights downloaded by ultralytics (it uses the git root as its weights dir)
+weights/
+
 # Agent worktrees and OS metadata
 .claude/worktrees/
 .DS_Store
