@@ -7,96 +7,137 @@ review. Gemini compiles policies and verifies selected uncertain crops.
 Inspired by HawkWatch's camera-to-incident product loop; PolicyLens focuses on
 user-defined policies, deterministic temporal rules and operator decisions.
 
-## Implemented checkpoint: contracts and temporal replay
+## What works in this checkout
 
-- Approved shared Pydantic models: `backend/app/models.py`.
-- HTTP, WebSocket and integration agreements: `contracts/api.md`.
-- Generated JSON schemas and validated demo payloads: `contracts/models.schema.json`
-  and `contracts/examples.json`.
-- Normalized zone geometry, with polygon configuration validation.
-- A camera-local persistent-object engine: duration thresholds, one alert per
-  incident, 1 s detection grace, 2 s closure, conservative tracking-ID recovery,
-  source-relative timestamps and detection confidence averaged over observations.
-- Deterministic synthetic tracking scenarios and a replay command.
+- **Policy compiler** (`backend/policy/`, Person 2): plain English to validated rule
+  cards, honest `unsupported` notes, an offline fallback for the demo prompt, a
+  compile cache, and a Gemini circuit breaker.
+- **Crop verifier** (`backend/verify/`, Person 2):
+  - checks: clear bag, professional camera, hard hat, hi-vis vest
+  - 4 s budget, never raises, shared rate limit
+- **Temporal engine** (`backend/engine/`):
+  - "stays too long" rules: duration thresholds, one alert per incident, 1 s
+    detection grace, 2 s closure, conservative tracking-ID recovery
+  - attribute rules: one verification per incident on the best crop, then a
+    violation, compliant or manual-review result
+- **Server** (`backend/app/main.py`): every route and WebSocket message in
+  `contracts/api.md`.
+  - one worker thread per camera (max 3)
+  - MJPEG stream and snapshots
+  - SQLite alerts with a decision audit trail
+  - JSON settings
+  - evidence JPEG plus a ~4 s clip
+- **Camera sources:**
+  - `synthetic:<scene>` and `replay:<tracks.jsonl>` work out of the box.
+  - `webcam:N`, `url:...` and `clip:...` use Person 1's vision pipeline. Until
+    `person1/vision` is merged and its detector stack installed, they show
+    `offline` with an explanation.
+- **Eval** (`eval/run_eval.py`): correct, false, missed and duplicate alerts, plus
+  latency per labeled case.
 
-The current engine supports persistent bags/chairs. Enabled attribute rules for
-its camera explicitly raise `NotImplementedError` until the next increment adds
-verification scheduling. Offline replay alerts have evidence marked unavailable;
-they do not imply saved images or clips. The HTTP server, storage, camera workers,
-vision, AI providers and frontend are not implemented in this checkout yet.
-
-All development is on `person4-integration`. Commits and pushes are handled by
-the repository collaborator. Do not commit `.env`, virtual environments, generated
-evaluation tracks, Python caches, or operating-system metadata.
+Contracts live in `backend/app/models.py` and `contracts/api.md`. The schemas and
+demo payloads are generated into `contracts/`. Construction-site safety gear
+(`hard_hat`, `safety_vest` on `person`) is part of the contract.
 
 ## Setup
 
 Use Python 3.11 or newer. From the repository root:
 
 ```sh
-python3.11 -m venv backend/.venv
-source backend/.venv/bin/activate
+python3.11 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 python -m pip install -r backend/app/requirements.txt
-cd backend
 ```
 
-Only Pydantic v2 is required for this checkpoint. No camera, Gemini key, model
-download or network access is needed after dependency installation.
+Put Gemini settings in `.env` at the repository root (never commit it):
 
-## Tests and replay
+```sh
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-flash-latest
+```
+
+Without a key, or with `POLICYLENS_FAKE_LLM=1`:
+- the compiler uses its offline fallback
+- the verifier answers deterministically from image brightness
+
+That's good for development and tests, not for real verdicts.
+
+## Run
 
 From `backend/`:
 
 ```sh
-python -B -m unittest discover -v
-python -B -m engine.fake_tracks ../eval/generated
-python -B -m engine.replay ../eval/generated/exit_bag.tracks.jsonl
-python -B -m engine.replay ../eval/generated/dropout.tracks.jsonl
-python -B -m engine.replay ../eval/generated/reentry.tracks.jsonl
+# Full demo with no camera and no Gemini key: two synthetic cameras, demo zones and rules
+POLICYLENS_SEED_DEMO=1 POLICYLENS_DEMO_SOURCES=synthetic POLICYLENS_FAKE_LLM=1 uvicorn app.main:app --port 8000
+
+# Normal run (cameras, zones and policy are configured through the API or UI)
+uvicorn app.main:app --port 8000
 ```
 
-Replay prints one JSON alert per line to stdout and a summary to stderr. It uses
-synthetic exit geometry unless `--config PATH` supplies a JSON object containing
-`zones` and `rules` arrays. A config enabling attribute rules is not supported yet.
-Replays use deterministic IDs and placeholder UTC times anchored to 1970-01-01;
-the `ts` values remain actual positions in the source data. Live timestamps will
-be recorded at incident creation.
+Data (settings, `alerts.db`, evidence) goes to `POLICYLENS_DATA_DIR`, default `backend/data/`, which
+is git-ignored.
 
-`exit_bag` should alert once at 5.0 s. `dropout` should also alert once at 5.0 s
-despite a 0.6 s missing-detection interval. `reentry` alerts at 5.0 s and 16.0 s
-with different incident IDs. `threshold_dropout` waits for an observed frame at
-5.4 s; it cannot alert from missing frames at the threshold.
+In the synthetic demo:
+- `cam_exit` shows a backpack left in the emergency exit. That gives an urgent
+  "Possible exit obstruction" alert after 5 s.
+- `cam_entrance` shows an opaque backpack, then a clear handbag. That gives one
+  "Possible non-clear bag" review alert.
 
-Synthetic files sample at 10 Hz and test code behavior, not model accuracy.
-See `eval/synthetic-results.md` for the checkpoint's measured test results.
+## Tests and eval
 
-To regenerate machine-readable contracts from the approved models:
+From `backend/`:
+
+```sh
+python -B -m unittest discover -v                      # engine, app, server, store
+python -m pytest policy/tests verify/tests -q          # compiler and verifier (offline)
+python -m pytest policy/tests verify/tests -m live -s  # live Gemini; needs GEMINI_API_KEY
+python -B -m engine.fake_tracks ../eval/generated
+python -B ../eval/run_eval.py ../eval/cases.csv
+python -B -m engine.replay ../eval/generated/exit_bag.tracks.jsonl
+```
+
+To check the server end to end: start the synthetic demo above, then
+`POST /api/policy/compile` with the demo prompt, `POST /api/monitor/start`, and
+`GET /api/alerts`.
+
+To regenerate the machine-readable contracts from the models:
 
 ```sh
 python -B -m app.export_contracts ../contracts
 ```
 
-## Architecture and next increments
+## Results so far
+
+| What | Result | Source |
+| --- | --- | --- |
+| Synthetic engine scenarios | 12/12 pass | `eval/synthetic-results.md` |
+| Synthetic eval cases | 8/8 expected alerts correct, 0 false, 0 missed, 0 duplicates | `eval/run_eval.py` |
+| Synthetic live server | 10 fps per camera; 15–47 ms from frame to stored alert | server log |
+| Real clips: detection, false alerts, latency | **not measured yet**, no footage recorded | — |
+| Gemini compile latency and verifier accuracy | **not measured yet**, no API key | `verify.eval` once crops exist |
+
+## Architecture
 
 ```text
-Organizer prompt -> Person 2 compiler -> approved rules -> operator confirms
-Camera -> Person 1 detector/tracker -> Person 4 temporal engine
-  -> asynchronous crop verifier (Person 2)
-  -> evidence + SQLite -> FastAPI / live updates -> Person 3 interface
-  -> human review decision -> saved record
+Organizer prompt -> policy compiler (Gemini + checks) -> rule cards -> operator confirms
+Camera -> vision pipeline (YOLO-World + ByteTrack) -> contract adapter -> rule engine
+  -> crop verifier (Gemini, one call per incident) -> alert
+  -> evidence writer + SQLite -> FastAPI REST / WebSocket / MJPEG -> UI
+  -> human review decision -> audit record
 ```
 
-Next: asynchronous attribute verification with a stub provider first, evidence
-and SQLite storage, then FastAPI and independent fake camera workers. Integrate
-teammates' real modules after the boundaries work with test substitutes.
+## Limitations
 
-## Limitations and evaluation
-
-No detection accuracy, real-camera throughput, Gemini latency or end-to-end
-performance has been measured. No recorded footage exists in this checkout yet.
-Synthetic success does not establish that the detector can see bags or cameras.
-
-Possible obstruction means a tracked object's bottom-center lies in a user-drawn
-region; it does not establish physical passability. Timers bridge brief detection
-gaps as a documented heuristic. Tracking-ID recovery is conservative and can miss
-identity changes in crowded scenes. Attribute verdicts will require human review.
+- **No real footage has been measured yet.** Synthetic success doesn't show the
+  detector can see bags, cameras or helmets.
+- **"Possible obstruction"** means a tracked object's bottom-center is inside a
+  user-drawn region. It doesn't establish physical passability.
+- **Timers** bridge brief detection gaps as a documented heuristic.
+- **Tracking-ID recovery** is conservative and can miss identity changes in
+  crowded scenes.
+- **Attribute verdicts are hedged and always go to a human.** "Unclear" becomes a
+  manual-review alert, never a confirmed violation.
+- **PolicyLens never identifies people.** Each person is an anonymous track within
+  one camera, with no face recognition and no cross-camera re-identification.
+- **Evidence clips** use H.264 when the platform's OpenCV build supports it, and
+  otherwise fall back to `mp4v`, which some browsers can't play.
