@@ -50,7 +50,9 @@ DECOY_CONFIDENCE = 0.25
 
 # minimum confidence per contract class
 CONFIDENCE = {
-    "person": 0.35,
+    # YOLO-World scores people in dense crowds around 0.15-0.35; at 0.35 a stadium
+    # entrance with 30+ people kept only 2, at 0.2 it keeps 16.
+    "person": 0.20,
     "backpack": 0.25,
     "handbag": 0.25,
     "suitcase": 0.25,
