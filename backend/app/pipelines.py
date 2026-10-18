@@ -84,6 +84,8 @@ class VisionAdapter:
         self.pipeline = VisionPipeline(camera.id, camera.source, multi_camera=multi_camera)
         self._origin = None
         self._last_index = None
+        self._stop_lock = threading.Lock()
+        self._stopped = False
 
     @property
     def status(self):
@@ -100,4 +102,7 @@ class VisionAdapter:
             yield image, adapt_track_frame(data, self.camera.id, origin=self._origin)
 
     def stop(self):
-        self.pipeline.stop()
+        with self._stop_lock:
+            if not self._stopped:
+                self._stopped = True
+                self.pipeline.stop()

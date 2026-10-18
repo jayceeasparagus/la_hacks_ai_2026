@@ -358,3 +358,9 @@ class RuleEngine:
                 raise TimeoutError('Verification drain timed out')
             time.sleep(0.002)
         return alerts
+
+    def snapshot_states(self):
+        """Worker-owned current state without advancing the source clock."""
+        rules = {rule.id: rule for rule in self.rules}
+        return [self._state(rules[key[0]], incident, self._last_ts or 0, incident.phase)
+                for key, incident in self._incidents.items() if incident.entered is not None]
