@@ -123,16 +123,47 @@ def main() -> None:
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--multi", action="store_true", help="use the 960 px multi-camera width")
     parser.add_argument("--realtime", action="store_true", help="play clips at true speed")
+    parser.add_argument("--show", action="store_true", help="show the annotated feed (q to quit)")
+    parser.add_argument("--demo-zone", action="store_true",
+                        help="with --show: time non-person objects in a test zone on the right half")
     args = parser.parse_args()
+    if args.show:
+        args.seconds = float("inf")  # run until q
 
     pipe = VisionPipeline(args.camera_id, args.source, imgsz=args.imgsz,
                           realtime=args.realtime, multi_camera=args.multi)
     start, last_print, frames, last = None, 0.0, 0, None
+    zone = {"name": "test_zone", "polygon": [[0.55, 0.35], [0.97, 0.35], [0.97, 0.97], [0.55, 0.97]]}
+    entered: dict[int, float] = {}  # track_id -> ts it entered the test zone
     try:
         for image, tf in pipe.frames():
             start = start or time.monotonic()
             frames += 1
             last = (image, tf)
+            if args.show:
+                from vision.annotate import draw_annotations
+                zones, states = [], []
+                if args.demo_zone:
+                    zones = [zone]
+                    (zx1, zy1), (zx2, zy2) = zone["polygon"][0], zone["polygon"][2]
+                    inside = set()
+                    for t in tf.tracks:
+                        cx, cy = (t.bbox[0] + t.bbox[2]) / 2, t.bbox[3]  # bottom-center
+                        if t.class_name != "person" and zx1 <= cx <= zx2 and zy1 <= cy <= zy2:
+                            inside.add(t.track_id)
+                            entered.setdefault(t.track_id, tf.ts)
+                            elapsed = tf.ts - entered[t.track_id]
+                            states.append({"track_id": t.track_id, "label": "In zone", "elapsed": elapsed,
+                                           "duration": 5, "severity": "urgent" if elapsed >= 5 else "review"})
+                    for track_id in list(entered):
+                        if track_id not in inside:
+                            del entered[track_id]
+                view = draw_annotations(image, zones, tf.tracks, states)
+                cv2.putText(view, f"{pipe.camera_id}  {pipe.fps:.1f} fps", (10, view.shape[0] - 12),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.imshow(f"PolicyLens vision - {pipe.camera_id}", view)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
             now = time.monotonic()
             if now - last_print >= 2.0:
                 print(f"[{pipe.camera_id}] fps={pipe.fps:.1f} {tf.to_json()[:300]}")
@@ -141,6 +172,8 @@ def main() -> None:
                 break
     finally:
         pipe.stop()
+        if args.show:
+            cv2.destroyAllWindows()
 
     if not last:
         print(f"no frames (status={pipe.status})")
