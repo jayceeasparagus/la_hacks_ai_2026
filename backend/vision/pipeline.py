@@ -54,6 +54,8 @@ class VisionPipeline:
         self._buffer: deque[tuple[float, bytes]] = deque()
         self._buffer_lock = threading.Lock()
         self._stopped = False
+        # Original-resolution copy of the frame last yielded (crops for Gemini come from this).
+        self.latest_full: np.ndarray | None = None
 
     @property
     def status(self) -> str:
@@ -85,6 +87,7 @@ class VisionPipeline:
                 tracks=[Track(d.track_id, d.cls, d.conf, list(d.bbox)) for d in detections],
             )
             self._remember(frame.ts, frame.image)
+            self.latest_full = frame.full if frame.full is not None else frame.image
 
             window_frames += 1
             elapsed = time.monotonic() - window_start

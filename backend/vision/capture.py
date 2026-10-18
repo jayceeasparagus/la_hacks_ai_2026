@@ -36,6 +36,7 @@ class Frame:
     image: np.ndarray  # BGR, already resized
     ts: float  # seconds: clip time for clips, wall clock (time.time()) for live
     index: int  # frame number since the source was opened
+    full: np.ndarray | None = None  # original resolution, for high-detail crops
 
 
 def parse_source(source: str) -> tuple[str, str]:
@@ -113,7 +114,7 @@ class Capture:
             delay = self._start_wall + ts - time.monotonic()
             if delay > 0:
                 time.sleep(delay)
-        frame = Frame(resize_to_width(image, self.width), ts, self._index)
+        frame = Frame(resize_to_width(image, self.width), ts, self._index, full=image)
         self._index += 1
         return frame
 
@@ -134,7 +135,7 @@ class Capture:
                 if not ok:
                     break
                 self.status = "online"
-                frame = Frame(resize_to_width(image, self.width), time.time(), self._index)
+                frame = Frame(resize_to_width(image, self.width), time.time(), self._index, full=image)
                 self._index += 1
                 with self._new_frame:
                     self._latest = frame
