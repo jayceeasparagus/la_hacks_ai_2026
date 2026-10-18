@@ -41,10 +41,14 @@ def explain(error: Exception) -> str:
         return ('No key found. Copy .env.example to .env at the repo root and set GEMINI_API_KEY '
                 '(AI Studio key) or, for Vertex AI, GOOGLE_GENAI_USE_VERTEXAI=true plus GOOGLE_API_KEY.')
     if 'api_key_service_blocked' in low:
-        return ('This key\'s API restrictions block the Gemini API (generativelanguage.googleapis.com). In Google Cloud '
-                'console > APIs & Services > Credentials > this key > API restrictions, add "Generative Language API" '
-                '(or choose "Don\'t restrict key"), make sure that API is enabled for the project, wait a few '
-                'minutes, and run this check again. Or create a key at https://aistudio.google.com/apikey.')
+        api = 'Vertex AI API' if 'aiplatform' in low else 'Generative Language API'
+        return (f'This key\'s API restrictions block the {api}. In Google Cloud console > APIs & Services > '
+                f'Credentials > this key > API restrictions, add "{api}" (or choose "Don\'t restrict key"), make sure '
+                'that API is enabled for the project, wait a few minutes, and run this check again.')
+    if 'prepayment credits are depleted' in low or 'error code: 402' in low:
+        return ('The key works, but this project\'s prepaid Gemini API credits are used up. Add credits at '
+                'https://ai.studio/projects (Billing), or use a key from a project on the free tier, or switch to '
+                'Vertex AI (allow "Vertex AI API" on an express key) so usage bills to Google Cloud credits.')
     if 'api keys are not supported by this api' in low or 'credentials_missing' in low:
         return ('Vertex AI refused the key: it is not a Vertex AI express-mode key. Use it in Gemini API mode '
                 '(remove GOOGLE_GENAI_USE_VERTEXAI), create an express key in Vertex AI Studio, or use '
