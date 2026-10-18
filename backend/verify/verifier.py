@@ -71,6 +71,8 @@ def _verify(crop, check, started) -> tuple[Verdict, VisionAnswer | None, bool]:
     if llm.fake_mode():
         raw = _fake_answer(crop, check)
     else:
+        if not llm.available():
+            return Verdict(answer=None, confidence=0, reason="verification unavailable"), None, False
         if not ratelimit.LIMITER.acquire(BUSY_WAIT_S):
             return Verdict(answer=None, confidence=0, reason="verification busy"), None, False
         remaining = max(0.1, TIMEOUT_S - (time.monotonic() - started))

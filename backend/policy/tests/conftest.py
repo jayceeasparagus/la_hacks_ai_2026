@@ -3,7 +3,7 @@ import os
 import pytest
 from dotenv import load_dotenv
 
-from policy import cache
+from policy import cache, llm
 
 load_dotenv()
 
@@ -27,6 +27,7 @@ def isolated(request, monkeypatch, tmp_path):
     """Offline FAKE mode and a throwaway cache for every non-live test."""
     monkeypatch.setenv("POLICYLENS_CACHE_DIR", str(tmp_path / "cache"))
     cache.clear_memory()
+    llm.reset_breaker()
     if "live" in request.keywords:
         if not os.getenv("GEMINI_API_KEY"):
             pytest.skip("GEMINI_API_KEY is not set")

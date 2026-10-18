@@ -13,6 +13,20 @@ log = logging.getLogger("policylens.llm")
 
 DEFAULT_MODEL = "gemini-flash-latest"
 
+# Circuit breaker: after this many failures in a row, skip Gemini for a while so a dead network
+# (venue Wi-Fi, bad key, quota) costs nothing instead of a timeout on every call.
+FAILURES_TO_PAUSE = 3
+PAUSE_SECONDS = 30.0
+
+
+class GeminiUnavailable(RuntimeError):
+    pass
+
+
+_breaker_lock = threading.Lock()
+_failures = 0
+_paused_until = 0.0
+
 _client = None
 _client_lock = threading.Lock()
 # Calls run here so callers can enforce a wall-clock timeout with future.result(timeout=...).
@@ -53,7 +67,12 @@ def submit_structured(
     system: str | None = None,
     thinking_level: str | None = None,
 ) -> Future:
-    """Start a structured-output call in the worker pool; the future resolves to the JSON text."""
+    """Start a structured-output call in the worker pool; the future resolves to the JSON text.
+    While the breaker is open the future fails at once with GeminiUnavailable."""
+    if not available():
+        future: Future = Future()
+        future.set_exception(GeminiUnavailable("Gemini paused after repeated failures"))
+        return future
 
     def call() -> str:
         started = time.monotonic()
@@ -71,8 +90,10 @@ def submit_structured(
             interaction = get_client().interactions.create(**kwargs)
         except Exception as exc:
             log.warning("Gemini call failed after %d ms (%s): %s", _ms(started), model, exc)
+            _record(ok=False, error=exc)
             raise
-        text = interaction.output_text
+        _record(ok=True)
+        text = strip_fences(interaction.output_text or "")
         log.info("Gemini %s answered in %d ms", model, _ms(started))
         if not text:
             raise ValueError("Gemini returned no text")
@@ -87,6 +108,52 @@ def call_structured(contents, schema: dict, *, model: str, timeout: float, syste
     future = submit_structured(contents, schema, model=model, timeout=timeout, system=system,
                                thinking_level=thinking_level)
     return future.result(timeout=timeout)
+
+
+def strip_fences(text: str) -> str:
+    """Structured output should be bare JSON, but tolerate a ```json fence around it."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+    return text.strip()
+
+
+def available() -> bool:
+    with _breaker_lock:
+        return time.monotonic() >= _paused_until
+
+
+def reset_breaker() -> None:
+    global _failures, _paused_until
+    with _breaker_lock:
+        _failures, _paused_until = 0, 0.0
+
+
+def _record(ok: bool, error: Exception | None = None) -> None:
+    global _failures, _paused_until
+    with _breaker_lock:
+        if ok:
+            _failures = 0
+            return
+        _failures += 1
+        if _failures >= FAILURES_TO_PAUSE:
+            _paused_until = time.monotonic() + PAUSE_SECONDS
+            _failures = 0
+            log.error("Gemini paused for %.0f s after %d failures in a row (last: %s); using fallbacks",
+                      PAUSE_SECONDS, FAILURES_TO_PAUSE, error)
+
+
+def status() -> dict:
+    """For a health endpoint: which models, whether a key is set, whether Gemini is paused."""
+    return {
+        "mode": "fake" if fake_mode() else "gemini",
+        "policy_model": policy_model(),
+        "verify_model": verify_model(),
+        "api_key_set": bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
+        "available": available(),
+    }
 
 
 def _ms(started: float) -> int:

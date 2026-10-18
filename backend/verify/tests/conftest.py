@@ -3,6 +3,7 @@ import os
 import pytest
 from dotenv import load_dotenv
 
+from policy import llm
 from verify import ratelimit, verifier
 
 load_dotenv()
@@ -25,6 +26,7 @@ def pytest_collection_modifyitems(config, items):
 def isolated(request, monkeypatch):
     """Offline FAKE mode, an empty cache and a fresh rate limiter for every non-live test."""
     verifier._cache.clear()
+    llm.reset_breaker()
     monkeypatch.setattr(ratelimit, "LIMITER", ratelimit.RateLimiter())
     if "live" in request.keywords:
         if not os.getenv("GEMINI_API_KEY"):
