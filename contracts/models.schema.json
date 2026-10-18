@@ -84,7 +84,9 @@
           "name": {
             "enum": [
               "transparent",
-              "professional"
+              "professional",
+              "hard_hat",
+              "safety_vest"
             ],
             "title": "Name",
             "type": "string"
@@ -194,7 +196,9 @@
           "name": {
             "enum": [
               "transparent",
-              "professional"
+              "professional",
+              "hard_hat",
+              "safety_vest"
             ],
             "title": "Name",
             "type": "string"
@@ -520,7 +524,9 @@
           "name": {
             "enum": [
               "transparent",
-              "professional"
+              "professional",
+              "hard_hat",
+              "safety_vest"
             ],
             "title": "Name",
             "type": "string"

@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from run_eval import evaluate, load_cases, score
+from recorded_eval import evaluate, load_cases, score
 
 
 class EvaluationTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(score([self.alert('a',5)], [])['false_alerts'],1)
 
     def test_repository_case_manifest_has_twenty_valid_cases(self):
-        cases=load_cases(Path(__file__).resolve().parents[1] / 'cases.csv')
+        cases=load_cases(Path(__file__).resolve().parents[1] / 'recorded_cases.csv')
         self.assertEqual(len(cases),20)
 
     def test_empty_case_file_fails_loudly(self):

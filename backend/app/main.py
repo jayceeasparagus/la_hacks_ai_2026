@@ -1,32 +1,49 @@
-"""FastAPI application implementing the approved PolicyLens REST/WS contract."""
+"""PolicyLens HTTP + WebSocket server (contracts/api.md).
+
+Run from backend/:  uvicorn app.main:app --port 8000
+
+Environment:
+- POLICYLENS_DATA_DIR      settings/, alerts.db and evidence/ (default backend/data)
+- POLICYLENS_SEED_DEMO=1   write the demo cameras, zones and rules if none are saved
+- POLICYLENS_DEMO_SOURCES=synthetic   seed the demo cameras with synthetic scenes (no webcam)
+- POLICYLENS_FAKE_LLM=1    offline compiler and verifier (no network)
+- POLICYLENS_SOURCE_SPEED  playback speed multiplier for synthetic/replay sources
+"""
+
+from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-import re
-from types import SimpleNamespace
 from typing import Literal
 
-import anyio
-
-from fastapi import Body, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from pydantic import Field
 
-from app.adapters import demo_compile, integrated_compile, validate_compile_result
-from app.events import EventHub
-from app.models import Camera, Decision, Model, Rule, Zone
-from app.pipelines import FakePipeline, VisionAdapter
-from app.runtime import Monitor
-from engine.evidence import EvidenceWriter
-from engine.verification import StubVerifier, VerificationScheduler
-from store.config import ConfigurationStore, DuplicateConfiguration
+from app.broadcast import Broadcaster
+from app.demo import demo_cameras
+from app.evidence import EvidenceWriter
+from app.models import Alert, Camera, CompileResult, Decision, Model, Rule, Zone
+from app.settings import Settings, SettingsError
+from app.sources import snapshot_image
+from app.render import encode_jpeg
+from app.workers import MonitorManager
+from engine.alerts import utc_now
 from store.db import AlertStore
 
 log = logging.getLogger('policylens.app')
 
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+CORS_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+STREAM_INTERVAL = 0.1  # ~10 fps MJPEG
+BOUNDARY = 'frame'
+SYNTHETIC_DEMO_SOURCES = {'cam_entrance': 'synthetic:entrance_bag', 'cam_exit': 'synthetic:exit_bag'}
+
+
+# Request and response bodies (extra fields are rejected with 422) --------------------
 
 class CamerasBody(Model):
     cameras: list[Camera]
@@ -36,262 +53,278 @@ class ZonesBody(Model):
     zones: list[Zone]
 
 
-class PolicyBody(Model):
+class RulesBody(Model):
     rules: list[Rule]
 
 
 class CompileBody(Model):
-    prompt: str = Field(min_length=1, max_length=2000)
+    prompt: str
 
 
 class DecisionBody(Model):
     decision: Decision
 
 
-class EmptyBody(Model):
-    pass
+class CameraStatus(Model):
+    camera_id: str
+    status: Literal['online', 'offline', 'connecting']
+    fps: float
+    last_frame_ts: float | None
+    error: str | None
 
 
-def create_app(*, data_dir=None, mode=None, pipeline_factory=None, compiler=None,
-               verifier=None, realtime=True):
-    selected_mode = mode or os.environ.get('POLICYLENS_MODE', 'demo')
-    if selected_mode not in ('demo', 'integrated'):
-        raise ValueError('POLICYLENS_MODE must be demo or integrated')
-    root = Path(data_dir or os.environ.get('POLICYLENS_DATA_DIR') or
-                Path(__file__).resolve().parents[1] / 'store' / 'runtime')
+class MonitorStatus(Model):
+    running: bool
+    cameras: list[CameraStatus]
+
+
+class RunningBody(Model):
+    running: bool
+
+
+class AlertList(Model):
+    alerts: list[Alert]
+    total: int
+
+
+class Health(Model):
+    status: Literal['ok']
+
+
+# Helpers --------------------------------------------------------------------------
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, '').strip().lower() in ('1', 'true', 'yes')
+
+
+def settings_status(error: SettingsError) -> int:
+    """409 for duplicate ids and reference conflicts, 500 for unreadable files, else 422."""
+    message = str(error)
+    if (message.startswith('Duplicate') or message.startswith('Cannot remove')
+            or 'references unknown' in message):
+        return 409
+    if 'is unreadable' in message:
+        return 500
+    return 422
+
+
+def seed(settings: Settings) -> None:
+    if not _env_flag('POLICYLENS_SEED_DEMO'):
+        return
+    if (os.getenv('POLICYLENS_DEMO_SOURCES', '').strip().lower() == 'synthetic'
+            and not settings.path('cameras').exists()):
+        cameras = [camera.model_copy(update={'source': SYNTHETIC_DEMO_SOURCES.get(camera.id, camera.source)})
+                   for camera in demo_cameras()]
+        settings.save_cameras(cameras)
+    settings.seed_demo()
+
+
+def create_app(data_dir: Path | None = None, *, verifier=None, source_factory=None) -> FastAPI:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+    configured_dir = data_dir
 
     @asynccontextmanager
-    async def lifespan(app):
-        if selected_mode == 'integrated':
-            try:
-                if pipeline_factory is None:
-                    from vision.pipeline import VisionPipeline  # noqa: F401
-                if compiler is None:
-                    from policy.compiler import compile_policy  # noqa: F401
-            except ImportError:
-                raise RuntimeError('Integrated mode requires the vision and policy modules and their dependencies') from None
-        settings = ConfigurationStore(root / 'config.json')
-        store = AlertStore(root / 'alerts.sqlite3')
-        hub = EventHub()
-        provider = verifier
-        if provider is None and selected_mode == 'integrated':
-            from verify.verifier import verify_crop
-            provider = verify_crop
-        if provider is None:
-            provider = StubVerifier()
-        scheduler = VerificationScheduler(provider)
-        writer = EvidenceWriter(root / 'evidence')
-        factory = pipeline_factory or (
-            (lambda camera: FakePipeline(camera, realtime=realtime)) if selected_mode == 'demo' else
-            (lambda camera: VisionAdapter(camera, multi_camera=len(settings.snapshot().cameras) > 1)))
-        monitor = Monitor(settings, store, hub, scheduler, writer, factory)
-        app.state.services = SimpleNamespace(settings=settings, store=store, hub=hub,
-            monitor=monitor, compiler=compiler or (demo_compile if selected_mode == 'demo' else integrated_compile),
-            evidence_dir=root / 'evidence', mode=selected_mode)
-        log.warning('PolicyLens mode=%s; demo mode uses saved tracks and explicitly unclear stub verdicts', selected_mode)
+    async def lifespan(app: FastAPI):
+        root = Path(configured_dir or os.getenv('POLICYLENS_DATA_DIR') or BACKEND_DIR / 'data')
+        settings = Settings(root / 'settings')
+        seed(settings)
+        store = AlertStore(root / 'alerts.db')
+        evidence = EvidenceWriter(root / 'evidence')
+        broadcaster = Broadcaster()
+        broadcaster.bind(asyncio.get_running_loop())
+        manager = MonitorManager(settings, store, evidence, broadcaster.publish,
+                                 verifier=verifier, source_factory=source_factory)
+        app.state.settings, app.state.store, app.state.evidence = settings, store, evidence
+        app.state.broadcaster, app.state.manager = broadcaster, manager
+        log.info('PolicyLens data directory: %s', root)
         try:
             yield
         finally:
-            try:
-                monitor.stop()
-            except RuntimeError:
-                log.warning('Camera shutdown still pending')
-            scheduler.close(wait=False)
-            writer.close()
+            await asyncio.to_thread(manager.close)
+            broadcaster.unbind()
+            await asyncio.to_thread(evidence.shutdown, True)
+            store.close()
 
     app = FastAPI(title='PolicyLens', lifespan=lifespan)
+    app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=False,
+                       allow_methods=['*'], allow_headers=['*'])
 
-    def services():
-        return app.state.services
+    def state(request: Request):
+        return request.app.state
 
-    def camera(camera_id):
-        found = next((item for item in services().settings.snapshot().cameras if item.id == camera_id), None)
-        if found is None:
-            raise HTTPException(404, 'Camera not found')
-        return found
+    def require_stopped(request: Request) -> None:
+        if state(request).manager.running:
+            raise HTTPException(409, 'Stop monitoring before changing the configuration')
 
-    def change_config(**changes):
-        service = services()
-        with service.monitor.control_lock:
-            if service.monitor.running:
-                raise HTTPException(409, 'Stop monitoring before editing configuration')
+    def save(request: Request, saver, items):
+        # Serialize configuration writes with monitor startup.
+        with state(request).manager._lock:
+            require_stopped(request)
             try:
-                result = service.settings.replace(**changes)
-            except DuplicateConfiguration as exc:
-                raise HTTPException(409, str(exc)) from None
-            except ValueError as exc:
-                raise HTTPException(422, str(exc)) from None
-            service.monitor.invalidate_preview()
-            return result
+                return saver(items)
+            except SettingsError as error:
+                raise HTTPException(settings_status(error), str(error)) from error
 
-    @app.get('/api/health')
+    def read(getter):
+        try:
+            return getter()
+        except SettingsError as error:
+            raise HTTPException(500, str(error)) from error
+
+    def camera_or_404(request: Request, camera_id: str) -> Camera:
+        for camera in read(state(request).settings.cameras):
+            if camera.id == camera_id:
+                return camera
+        raise HTTPException(404, f'Unknown camera {camera_id}')
+
+    # Health and configuration ----------------------------------------------------------
+
+    @app.get('/api/health', response_model=Health)
     def health():
         return {'status': 'ok'}
 
-    @app.get('/api/cameras')
-    def cameras():
-        return {'cameras': services().settings.snapshot().cameras}
+    @app.get('/api/cameras', response_model=CamerasBody)
+    def get_cameras(request: Request):
+        return {'cameras': read(state(request).settings.cameras)}
 
-    @app.put('/api/cameras')
-    def save_cameras(body: CamerasBody):
-        return {'cameras': change_config(cameras=body.cameras).cameras}
+    @app.put('/api/cameras', response_model=CamerasBody)
+    def put_cameras(body: CamerasBody, request: Request):
+        return {'cameras': save(request, state(request).settings.save_cameras, body.cameras)}
 
-    @app.get('/api/zones')
-    def zones():
-        return {'zones': services().settings.snapshot().zones}
+    @app.get('/api/zones', response_model=ZonesBody)
+    def get_zones(request: Request):
+        return {'zones': read(state(request).settings.zones)}
 
-    @app.put('/api/zones')
-    def save_zones(body: ZonesBody):
-        return {'zones': change_config(zones=body.zones).zones}
+    @app.put('/api/zones', response_model=ZonesBody)
+    def put_zones(body: ZonesBody, request: Request):
+        return {'zones': save(request, state(request).settings.save_zones, body.zones)}
 
-    @app.get('/api/policy')
-    def policy():
-        return {'rules': services().settings.snapshot().rules}
+    @app.post('/api/policy/compile', response_model=CompileResult)
+    def compile_route(body: CompileBody, request: Request):
+        from policy.compiler import compile_policy
+        return compile_policy(body.prompt, read(state(request).settings.zones))
 
-    @app.put('/api/policy')
-    def save_policy(body: PolicyBody):
-        return {'rules': change_config(rules=body.rules).rules}
+    @app.get('/api/policy', response_model=RulesBody)
+    def get_policy(request: Request):
+        return {'rules': read(state(request).settings.rules)}
 
-    @app.post('/api/policy/compile')
-    def compile_policy(body: CompileBody):
-        service = services()
-        config = service.settings.snapshot()
+    @app.put('/api/policy', response_model=RulesBody)
+    def put_policy(body: RulesBody, request: Request):
+        return {'rules': save(request, state(request).settings.save_rules, body.rules)}
+
+    # Monitoring ----------------------------------------------------------------------
+
+    @app.post('/api/monitor/start', response_model=RunningBody)
+    def monitor_start(request: Request):
         try:
-            result = service.compiler(body.prompt, config.zones)
-            return validate_compile_result(result, config.cameras, config.zones)
-        except ValueError:
-            raise HTTPException(422, 'Compiler returned invalid or unsupported rules') from None
-        except Exception:
-            raise HTTPException(503, 'Policy compilation unavailable') from None
-
-    @app.get('/api/monitor')
-    def monitor_status():
-        state = services().monitor.snapshot()
-        return {'running': state['running'], 'cameras': state['cameras']}
-
-    @app.post('/api/monitor/start')
-    def start_monitoring(body: EmptyBody | None = Body(default=None)):
-        try:
-            services().monitor.start()
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from None
-        except RuntimeError as exc:
-            raise HTTPException(409, str(exc)) from None
+            state(request).manager.start()
+        except SettingsError as error:
+            raise HTTPException(500, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(409, f'Cannot start monitoring: {error}') from error
         return {'running': True}
 
-    @app.post('/api/monitor/stop')
-    def stop_monitoring(body: EmptyBody | None = Body(default=None)):
-        try:
-            services().monitor.stop()
-        except RuntimeError as exc:
-            raise HTTPException(409, str(exc)) from None
+    @app.post('/api/monitor/stop', response_model=RunningBody)
+    def monitor_stop(request: Request):
+        state(request).manager.stop()
         return {'running': False}
 
-    @app.get('/api/snapshot/{camera_id}')
-    def snapshot(camera_id: str):
-        selected = camera(camera_id)
-        try:
-            with services().monitor.control_lock:
-                jpeg = services().monitor.preview(selected)
-        except Exception:
-            jpeg = None
-        if jpeg is None:
-            raise HTTPException(503, 'Camera image unavailable')
-        return Response(jpeg, media_type='image/jpeg', headers={'Cache-Control': 'no-store'})
+    @app.get('/api/monitor', response_model=MonitorStatus)
+    def monitor(request: Request):
+        manager = state(request).manager
+        return {'running': manager.running, 'cameras': manager.statuses()}
 
-    @app.get('/api/stream/{camera_id}')
-    def stream(camera_id: str, request: Request):
-        selected = camera(camera_id)
-        try:
-            with services().monitor.control_lock:
-                jpeg = services().monitor.preview(selected)
-        except Exception:
-            jpeg = None
-        if jpeg is None:
-            raise HTTPException(503, 'Camera stream unavailable')
+    # Alerts --------------------------------------------------------------------------
 
-        async def chunks():
-            last_version = -1
-            while not await request.is_disconnected():
-                frame, version = services().monitor.latest(camera_id)
-                if frame is not None and version != last_version:
-                    yield (b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: '
-                           + str(len(frame)).encode() + b'\r\n\r\n' + frame + b'\r\n')
-                    last_version = version
-                await asyncio.sleep(0.05)
-        return StreamingResponse(chunks(), media_type='multipart/x-mixed-replace; boundary=frame',
-                                 headers={'Cache-Control': 'no-store'})
+    @app.get('/api/alerts', response_model=AlertList)
+    def list_alerts(request: Request, camera_id: str | None = None,
+                    status: Literal['open', 'reviewed'] | None = None,
+                    limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
+        alerts, total = state(request).store.list(camera_id=camera_id, status=status,
+                                                  limit=limit, offset=offset)
+        return {'alerts': alerts, 'total': total}
 
-    @app.get('/api/alerts')
-    def alerts(camera_id: str | None = None, status: Literal['open', 'reviewed'] | None = None,
-               limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
-        rows, total = services().store.list(camera_id=camera_id, status=status, limit=limit, offset=offset)
-        return {'alerts': rows, 'total': total}
+    @app.get('/api/alerts/{alert_id}', response_model=Alert)
+    def get_alert(alert_id: str, request: Request):
+        alert = state(request).store.get(alert_id)
+        if alert is None:
+            raise HTTPException(404, 'Unknown alert')
+        return alert
 
-    @app.get('/api/alerts/{alert_id}')
-    def get_alert(alert_id: str):
-        try:
-            return services().store.get(alert_id)
-        except KeyError:
-            raise HTTPException(404, 'Alert not found') from None
-
-    @app.post('/api/alerts/{alert_id}/decision')
-    def decide(alert_id: str, body: DecisionBody):
-        try:
-            alert = services().store.decide(alert_id, body.decision)
-        except KeyError:
-            raise HTTPException(404, 'Alert not found') from None
-        services().hub.publish('alert_updated', alert.model_dump(mode='json'))
+    @app.post('/api/alerts/{alert_id}/decision', response_model=Alert)
+    def decide(alert_id: str, body: DecisionBody, request: Request):
+        store = state(request).store
+        before = store.get(alert_id)
+        if before is None:
+            raise HTTPException(404, 'Unknown alert')
+        alert = store.decide(alert_id, body.decision, utc_now())
+        if alert is None:
+            raise HTTPException(404, 'Unknown alert')
+        if alert != before:
+            state(request).broadcaster.publish('alert_updated', alert)
         return alert
 
     @app.get('/evidence/{filename}')
-    def evidence(filename: str):
-        directory = services().evidence_dir.resolve()
-        if not re.fullmatch(r'[0-9a-f]{32}\.(jpg|mp4)', filename):
-            raise HTTPException(404, 'Evidence not found')
-        path = (directory / filename).resolve()
-        if path.parent != directory or not path.is_file():
-            raise HTTPException(404, 'Evidence not found')
-        return FileResponse(path, media_type='video/mp4' if filename.endswith('.mp4') else 'image/jpeg')
+    def evidence_file(filename: str, request: Request):
+        path = state(request).evidence.resolve(filename)
+        if path is None:
+            raise HTTPException(404, 'Unknown evidence file')
+        media = 'video/mp4' if path.suffix == '.mp4' else 'image/jpeg'
+        return FileResponse(path, media_type=media)
+
+    # Frames ---------------------------------------------------------------------------
+
+    @app.get('/api/snapshot/{camera_id}')
+    def snapshot(camera_id: str, request: Request):
+        camera = camera_or_404(request, camera_id)
+        manager = state(request).manager
+        data = None
+        worker = manager.worker(camera_id) if manager.running else None
+        if worker is not None:
+            data = worker.raw_jpeg()
+        elif not manager.running:
+            image = snapshot_image(camera)
+            data = encode_jpeg(image) if image is not None else None
+        if data is None:
+            raise HTTPException(503, 'No frame available for this camera')
+        return Response(data, media_type='image/jpeg', headers={'Cache-Control': 'no-store'})
+
+    @app.get('/api/stream/{camera_id}')
+    async def stream(camera_id: str, request: Request):
+        await asyncio.to_thread(camera_or_404, request, camera_id)
+        manager = state(request).manager
+        if not manager.running or manager.worker(camera_id) is None:
+            raise HTTPException(503, 'Not monitoring; start monitoring to stream')
+
+        async def frames():
+            last = None
+            while manager.running:
+                worker = manager.worker(camera_id)
+                if worker is None or await request.is_disconnected():
+                    break
+                data = await asyncio.to_thread(worker.annotated_jpeg)
+                if data is not None and data is not last:
+                    last = data
+                    yield (f'--{BOUNDARY}\r\nContent-Type: image/jpeg\r\n'
+                           f'Content-Length: {len(data)}\r\n\r\n').encode() + data + b'\r\n'
+                await asyncio.sleep(STREAM_INTERVAL)
+
+        return StreamingResponse(frames(), media_type=f'multipart/x-mixed-replace; boundary={BOUNDARY}',
+                                 headers={'Cache-Control': 'no-store'})
+
+    # WebSocket -------------------------------------------------------------------------
 
     @app.websocket('/ws')
-    async def websocket(websocket: WebSocket):
-        await websocket.accept()
-        service = services()
-        client = service.hub.subscribe()
-        try:
-            await websocket.send_json({'type': 'snapshot', 'data': service.monitor.snapshot()})
-            async with anyio.create_task_group() as group:
-                async def disconnected():
-                    try:
-                        while (await websocket.receive())['type'] != 'websocket.disconnect':
-                            pass
-                    except (WebSocketDisconnect, RuntimeError):
-                        pass
-                    finally:
-                        group.cancel_scope.cancel()
-
-                async def send_events():
-                    try:
-                        while True:
-                            message = await client.queue.get()
-                            if message['type'] == '__overflow__':
-                                await websocket.close(code=1013, reason='Reload alerts and reconnect')
-                                return
-                            await websocket.send_json(message)
-                    except (WebSocketDisconnect, RuntimeError):
-                        pass
-                    finally:
-                        group.cancel_scope.cancel()
-
-                group.start_soon(disconnected)
-                group.start_soon(send_events)
-        except (WebSocketDisconnect, RuntimeError):
-            pass
-        finally:
-            service.hub.unsubscribe(client)
+    async def websocket(ws: WebSocket):
+        app_state = ws.app.state
+        await app_state.broadcaster.serve(ws, app_state.manager.snapshot)
 
     return app
 
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 app = create_app()

@@ -18,6 +18,8 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 from app.demo import demo_cameras, demo_rules, demo_zones
 from app.models import Track, TrackFrame
+from engine.evidence import FrameBuffer
+from engine.verification import StubVerifier
 
 
 class SoakPipeline:
@@ -25,10 +27,14 @@ class SoakPipeline:
     def __init__(self, camera):
         self.camera = camera
         self.status = 'connecting'
+        self.error = None
+        self.ended = False
+        self._buffer = FrameBuffer()
+        self._buffer_lock = threading.Lock()
         self.closed = threading.Event()
 
     def frames(self):
-        began = time.monotonic()
+        began = self.began = time.monotonic()
         while not self.closed.is_set():
             ts = time.monotonic() - began
             cycle = int(ts // 20)
@@ -40,9 +46,16 @@ class SoakPipeline:
                     tracks.append(Track(track_id=cycle * 2 + 2, object_class='camera',
                         bbox=(0.55, 0.3, 0.75, 0.7), confidence=0.9))
             self.status = 'online'
-            yield np.full((270, 480, 3), 100, np.uint8), TrackFrame(
+            image = np.full((270, 480, 3), 100, np.uint8)
+            with self._buffer_lock:
+                self._buffer.remember(image, ts)
+            yield image, TrackFrame(
                 camera_id=self.camera.id, ts=ts, tracks=tracks)
             self.closed.wait(0.1)
+
+    def recent_frames(self, seconds):
+        with self._buffer_lock:
+            return self._buffer.snapshot(time.monotonic() - self.began, seconds)
 
     def stop(self):
         self.closed.set()
@@ -55,7 +68,7 @@ def run(seconds=300, output=None):
     root.mkdir(parents=True, exist_ok=True)
     output = Path(output or root / 'report.json')
     expected = 3 * (seconds // 20)
-    app = create_app(data_dir=root / 'data', mode='demo', pipeline_factory=SoakPipeline)
+    app = create_app(data_dir=root / 'data', source_factory=SoakPipeline, verifier=StubVerifier())
     report = {'mode': 'Synthetic two-camera backend; stub verifier; TestClient HTTP + WebSocket',
               'target_seconds': seconds, 'expected_alerts': expected, 'passed': False}
     started = time.monotonic()

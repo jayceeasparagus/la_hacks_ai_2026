@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from app.models import Verdict
 
 log = logging.getLogger('policylens.engine.verification')
-VerificationKey = tuple[str, str, str, int]  # camera, session, check, original track ID
+VerificationKey = tuple[str, str, str, int | str]  # camera, session, check, incident or original track ID
 
 
 def unavailable(reason='verification unavailable') -> Verdict:

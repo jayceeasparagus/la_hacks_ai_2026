@@ -1,92 +1,60 @@
-# Person 4 backend and evaluation results
+# Combined backend validation
 
-Validated on 2026-10-17 on the local Mac using Python 3.12.14, Pydantic 2.14.0,
-NumPy 2.3.5, OpenCV 5.0.0, FastAPI 0.143.3, Starlette 1.8.0 and httpx 0.28.1.
-The project minimum is Python 3.11; that interpreter was not separately tested.
+The integration uses main's FastAPI server, settings, SQLite store, policy/compiler,
+verifier, source adapters and safety-gear contracts. Person 4's bounded scheduler,
+source-frame buffering, evidence safeguards, recorded evaluation and soak driver
+are integrated with those interfaces. Duplicate application/configuration stacks
+were removed; their original implementations remain in Git history.
 
 ## Automated checks
 
-- **96 backend tests pass**: shared models, geometry, temporal rules, attribute
-  verification, evidence, persistence, camera workers, adapters, API and WebSocket.
-- **5 evaluation-scoring tests pass**: positive/negative cases, time-window
-  matching, duplicate classification and manifest validation.
-- Multipart streaming returns an actual JPEG frame. Evidence video byte-range
-  requests return 206 and the expected number of bytes.
-- An unavailable camera retries while another camera produces and saves an
-  alert. Repeated start/stop and restart are tested.
-- Configuration references and polygons are validated before persistence; disk
-  replacement failure preserves previous settings. Review and evidence updates
-  are serialized in SQLite so one cannot overwrite the other.
+Run from `backend/`:
 
-## Twenty recorded functional cases
+```sh
+POLICYLENS_FAKE_LLM=1 python -B -m pytest app/tests engine/tests store/tests policy/tests verify/tests ../eval/tests -q
+```
 
-`eval/cases.csv` references generated, visibly synthetic clips and saved tracks.
-Entrance cases reuse the same clip with explicitly canned verdict combinations.
+**265 tests passed, 17 live-provider tests skipped**, with 87 additional unittest subtests.
+Validated with Python 3.12.14 on the local Mac.
 
-| Metric | Observed |
-| --- | ---: |
-| Cases passed | 20 / 20 |
-| Expected alert events matched | 17 |
-| False alerts | 0 |
-| Missed events | 0 |
-| Duplicate alerts | 0 |
-| Case execution errors | 0 |
-| Mean source-time delay after expected threshold | 0.024 s |
-| Mean engine alert latency | 0.090 s |
+Live-provider tests are skipped; no Gemini request or actual detector is used.
+Regressions include idle verification delivery, disconnect invalidation with reused
+track IDs, shared capacity across monitor restarts, bounded evidence encoding,
+late evidence preserving decisions and other alert fields, and HTTP byte ranges.
+Main's compiler, verifier, hard-hat/vest rules and existing server tests are included.
 
-Engine alert latency is wall time from the first processed frame at the expected
-threshold to new-alert emission. It does not measure capture-to-browser time.
-The source delay includes the deliberately hidden threshold observation that
-waits until 5.4 s to produce an alert. Wall timings vary by machine and load.
-
-## Continuous two-camera backend run
-
-A real-time synthetic source fed the application for **300.095 seconds without
-restart**. This used the real FastAPI handlers through TestClient, WebSocket
-updates, camera workers, shared verifier scheduling, evidence writer and SQLite.
-The default verifier explicitly returned unclear; no Gemini request was made.
-
-| Metric | Observed |
-| --- | ---: |
-| WebSocket messages received | 3,595 |
-| Distinct incidents/alerts | 45 |
-| Decisions saved through HTTP | 45 |
-| Alerts with ready evidence | 45 |
-| Duplicate incident IDs | 0 |
-| Thread count after startup | 10 throughout sampled checks |
-| Process peak RSS on macOS | approximately 148 MiB |
-
-The thread count began at seven before lazy background workers started. Peak RSS
-is a process high-water mark, not a memory-leak diagnosis. Both cameras stayed
-active, periodic health/status requests succeeded, and stopping completed safely.
-
-## Reproduce
-
-Install `backend/app/requirements-dev.txt` in the environment. From the repo root:
+## Recorded-video evaluation
 
 ```sh
 python -B eval/generate_fixtures.py
-python -B eval/run_eval.py --output eval/generated/evaluation-report.json
-python -B -m unittest discover -s eval/tests -v
+python -B eval/recorded_eval.py --output eval/generated/recorded-report.json
+```
+
+The separate `eval/recorded_cases.csv` contains 20 cases: generated, visibly
+synthetic video plus saved tracks and explicitly canned attribute verdicts.
+It passes 20/20 cases: 17 expected alerts matched, no false/missed/duplicate
+alerts or execution errors. Mean source delay is approximately 0.024 seconds;
+wall latency varies by load. Wall latency measures the first processed frame
+at the expected threshold to alert emission, excluding HTTP/UI/evidence latency.
+Main's `eval/run_eval.py` and `eval/cases.csv` retain their existing formats.
+
+## Continuous backend check
+
+```sh
 python -B eval/soak_backend.py --output eval/generated/soak-report.json
 ```
 
-From `backend/`:
+This uses two synthetic sources at real speed, an explicit unclear stub verifier,
+TestClient HTTP/WebSocket, the actual workers, SQLite and evidence writer. The
+five-minute run expects 45 distinct incidents, each reviewed through HTTP and
+with ready evidence. `--seconds 20` is only a short wiring check (3 incidents).
+The earlier branch's five-minute measurements in prior revisions are historical;
+merged-backend results are recorded below after validation.
 
-```sh
-python -B -m unittest discover -v
-```
+## Remaining validation
 
-The soak driver creates a fresh generated data directory per run. Its default
-duration is five minutes; `--seconds 20` is a shorter wiring check and must not
-be reported as a five-minute result. Durations are multiples of 20 seconds.
-
-## Still requires real integration
-
-- Real detector/camera FPS, tracking stability and source reconnection behavior.
-- Person 2's real compiler/verifier, credentials, accuracy and provider latency.
-- Person 3's complete browser workflow and real capture-to-UI alert latency.
-- A representative real-footage CSV evaluation set and final submission video.
-
-The integrated evaluator exists, but no real detection/classification accuracy
-is claimed. No teammate-owned modules or shared contract fields were changed.
+Real camera/detector FPS and reconnection behavior, actual Gemini accuracy and
+latency, the browser workflow, representative real-footage evaluation, and the
+submission recording still require integrated hardware/provider/UI testing.
+Synthetic results establish functional behavior, not real-world model accuracy.
+Shared contracts and teammate-owned modules match main without local modifications.

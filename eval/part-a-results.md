@@ -1,3 +1,5 @@
+> Historical Part A checkpoint before integration with main. For current commands and validation, see [backend-results.md](backend-results.md).
+
 # Part A verification and evidence checkpoint
 
 Validated on 2026-10-17 using Python 3.12.14, Pydantic 2.14.0, NumPy 2.3.5 and

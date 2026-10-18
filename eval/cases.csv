@@ -1,21 +1,14 @@
-case_id,clip,tracks,config,camera_id,rule,expected_count,expected_windows,stub_bag,stub_camera
-exit_bag,generated/evaluation/exit_bag.mp4,generated/evaluation/exit_bag.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5.0, 5.1]]",clear,ordinary
-walkthrough,generated/evaluation/walkthrough.mp4,generated/evaluation/walkthrough.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,0,[],clear,ordinary
-short_bag,generated/evaluation/short_bag.mp4,generated/evaluation/short_bag.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,0,[],clear,ordinary
-two_bags,generated/evaluation/two_bags.mp4,generated/evaluation/two_bags.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,2,"[[5.0, 5.1], [5.0, 5.1]]",clear,ordinary
-dropout,generated/evaluation/dropout.mp4,generated/evaluation/dropout.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5.0, 5.1]]",clear,ordinary
-id_switch,generated/evaluation/id_switch.mp4,generated/evaluation/id_switch.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5.0, 5.1]]",clear,ordinary
-reentry,generated/evaluation/reentry.mp4,generated/evaluation/reentry.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,2,"[[5.0, 5.1], [16.0, 16.1]]",clear,ordinary
-long_dropout,generated/evaluation/long_dropout.mp4,generated/evaluation/long_dropout.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[9.3, 9.4]]",clear,ordinary
-threshold_dropout,generated/evaluation/threshold_dropout.mp4,generated/evaluation/threshold_dropout.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5, 5.5]]",clear,ordinary
-empty,generated/evaluation/empty.mp4,generated/evaluation/empty.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,0,[],clear,ordinary
-chair,generated/evaluation/chair.mp4,generated/evaluation/chair.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5.0, 5.1]]",clear,ordinary
-outside_reset,generated/evaluation/outside_reset.mp4,generated/evaluation/outside_reset.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[9.5, 9.6]]",clear,ordinary
-clear_bag_pass,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,clear_bag,0,[],clear,ordinary
-opaque_bag_review,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,clear_bag,1,"[[1, 1.1]]",opaque,ordinary
-professional_camera_review,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,pro_camera,1,"[[1, 1.1]]",clear,professional
-ordinary_camera_pass,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,pro_camera,0,[],clear,ordinary
-unclear_bag_review,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,clear_bag,1,"[[1, 1.1]]",unclear,ordinary
-unclear_camera_review,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,pro_camera,1,"[[1, 1.1]]",clear,unclear
-both_violations,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,*,2,"[[1, 1.1], [1, 1.1]]",opaque,professional
-both_compliant,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,*,0,[],clear,ordinary
+case,source,config,rule_id,expected_alerts,window_start_s,window_end_s
+exit_bag,tracks:generated/exit_bag.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
+walkthrough,tracks:generated/walkthrough.tracks.jsonl,synthetic,blocked_exit,0,0,0
+short_bag,tracks:generated/short_bag.tracks.jsonl,synthetic,blocked_exit,0,0,0
+two_bags,tracks:generated/two_bags.tracks.jsonl,synthetic,blocked_exit,2,5.0,5.5
+dropout,tracks:generated/dropout.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
+id_switch,tracks:generated/id_switch.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
+reentry,tracks:generated/reentry.tracks.jsonl,synthetic,blocked_exit,2,5.0,16.5
+chair,tracks:generated/chair.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
+# Real clips go below once recorded; config points at a JSON with the zones drawn for that clip.
+# exit_bag_real,clip:../clips/exit_bag.mp4,configs/exit.json,blocked_exit,1,8.0,9.0
+# opaque_bag_entrance,clip:../clips/opaque_bag.mp4,configs/entrance.json,clear_bag,1,2.0,6.0
+# clear_bag_entrance,clip:../clips/clear_bag.mp4,configs/entrance.json,clear_bag,0,0,0
+# no_hard_hat_site,clip:../clips/site_no_helmet.mp4,configs/site.json,hard_hat,1,1.0,5.0
