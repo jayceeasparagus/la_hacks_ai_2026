@@ -1,5 +1,6 @@
-// Mock backend on :8000 so the frontend can be built before the FastAPI app exists.
-// Implements the routes in src/api.ts with canned data and a scripted demo loop:
+// Mock backend on :8000 so the frontend can be developed without the FastAPI app.
+// Speaks contracts/api.md (wrapped collections, {type, data} WebSocket messages, contract
+// Alert/RuleState/CameraStatus shapes) with canned data and a scripted demo loop:
 // a review alert at the entrance, then an exit obstruction timer that ticks 0 -> 5 s
 // and fires an urgent alert at 5.4 s. The loop repeats every 40 s.
 // Run with: npm run mock
@@ -39,7 +40,7 @@ const compiledRules = [
   },
 ]
 
-let policy = { text: '', rules: compiledRules }
+let policy = { rules: compiledRules }
 let alerts = []
 let monitoring = false
 let cycleStart = Date.now()
@@ -51,20 +52,22 @@ app.use(express.json())
 // Tells the frontend it may show this browser's webcam for webcam:N sources.
 app.get('/api/info', (_req, res) => res.json({ mock: true }))
 
-app.get('/api/cameras', (_req, res) => res.json(cameras))
+app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+
+app.get('/api/cameras', (_req, res) => res.json({ cameras }))
 app.put('/api/cameras', (req, res) => {
-  cameras = req.body
-  res.json(cameras)
+  cameras = req.body?.cameras ?? cameras
+  res.json({ cameras })
 })
 
-app.get('/api/zones', (_req, res) => res.json(zones))
+app.get('/api/zones', (_req, res) => res.json({ zones }))
 app.put('/api/zones', (req, res) => {
-  zones = req.body
-  res.json(zones)
+  zones = req.body?.zones ?? zones
+  res.json({ zones })
 })
 
 app.post('/api/policy/compile', (req, res) => {
-  const text = String(req.body?.text ?? '').toLowerCase()
+  const text = String(req.body?.prompt ?? '').toLowerCase()
   const unsupported = []
   const warnings = []
   if (/weapon|gun|knife/.test(text)) {
@@ -79,30 +82,42 @@ app.post('/api/policy/compile', (req, res) => {
   setTimeout(() => res.json({ rules: compiledRules, warnings, unsupported }), 900)
 })
 
+app.get('/api/policy', (_req, res) => res.json({ rules: policy.rules }))
 app.put('/api/policy', (req, res) => {
-  policy = req.body
-  res.status(204).end()
+  policy = { rules: req.body?.rules ?? [] }
+  res.json(policy)
 })
 
+const cameraStatus = (cam) => ({
+  camera_id: cam.id, status: monitoring ? 'online' : 'offline',
+  fps: monitoring ? 14.6 + Math.random() * 0.6 : 0, last_frame_ts: null, error: null,
+})
 app.post('/api/monitor/start', (_req, res) => {
   if (!monitoring) {
     monitoring = true
     cycleStart = Date.now()
+    broadcast({ type: 'monitor_status', data: { running: true } })
   }
-  res.status(204).end()
+  res.json({ running: true })
 })
 app.post('/api/monitor/stop', (_req, res) => {
   monitoring = false
-  res.status(204).end()
+  broadcast({ type: 'monitor_status', data: { running: false } })
+  res.json({ running: false })
 })
+app.get('/api/monitor', (_req, res) => res.json({ running: monitoring, cameras: cameras.map(cameraStatus) }))
 
-app.get('/api/alerts', (_req, res) => res.json([...alerts].sort((a, b) => b.created_at - a.created_at)))
+app.get('/api/alerts', (_req, res) => {
+  const sorted = [...alerts].sort((a, b) => b.created_at.localeCompare(a.created_at))
+  res.json({ alerts: sorted, total: sorted.length })
+})
 app.post('/api/alerts/:id/decision', (req, res) => {
   const alert = alerts.find((a) => a.id === req.params.id)
   if (!alert) return res.status(404).json({ detail: 'alert not found' })
-  const map = { confirm: 'confirmed', dismiss: 'dismissed', unclear: 'unclear' }
-  alert.status = map[req.body?.decision] ?? alert.status
-  broadcast({ type: 'alert_update', alert })
+  const decision = req.body?.decision
+  if (!['confirmed', 'dismissed', 'unclear'].includes(decision)) return res.status(422).json({ detail: 'invalid decision' })
+  if (alert.decision !== decision) Object.assign(alert, { status: 'reviewed', decision, decided_at: new Date().toISOString() })
+  broadcast({ type: 'alert_updated', data: alert })
   res.json(alert)
 })
 
@@ -137,21 +152,34 @@ function sceneSvg(cameraId) {
 
 const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
+wss.on('connection', (client) => {
+  const snapshot = { running: monitoring, cameras: cameras.map(cameraStatus), rule_states: [] }
+  client.send(JSON.stringify({ type: 'snapshot', data: snapshot }))
+})
 const broadcast = (msg) => {
   const data = JSON.stringify(msg)
   for (const client of wss.clients) if (client.readyState === 1) client.send(data)
 }
 
 function makeAlert(fields) {
+  const rule = policy.rules.find((r) => r.id === fields.rule_id) ?? compiledRules.find((r) => r.id === fields.rule_id)
+  const incident = `${fields.camera_id}:mock:${fields.rule_id}:${cycleCount}`
   const alert = {
-    id: `al_${cycleCount}_${fields.rule_id}`,
-    created_at: Date.now() / 1000,
+    id: `${incident}:alert`,
+    incident_id: incident,
+    zone_id: rule.zone,
+    rule_snapshot: rule,
+    ts: (Date.now() - cycleStart) / 1000,
+    created_at: new Date().toISOString(),
+    evidence_status: 'ready',
+    evidence_clip_url: null,
     status: 'open',
-    evidence_clip: null,
+    decision: null,
+    decided_at: null,
     ...fields,
   }
   alerts.push(alert)
-  broadcast({ type: 'alert', alert })
+  broadcast({ type: 'alert', data: alert })
 }
 
 let firedThisCycle = new Set()
@@ -169,16 +197,15 @@ setInterval(() => {
   for (const cam of cameras) {
     const ruleStates = []
     if (monitoring && cam.id === 'cam_exit' && t > 3 && t < 14) {
+      const elapsed = Math.round((t - 3) * 10) / 10
       ruleStates.push({
-        rule_id: 'blocked_exit', camera_id: cam.id, track_id: 14 + cycleCount, class_name: 'backpack',
-        elapsed_seconds: Math.round((t - 3) * 10) / 10, duration_seconds: 5, bbox: [0.46, 0.72, 0.55, 0.88],
+        camera_id: cam.id, rule_id: 'blocked_exit', track_id: 14 + cycleCount,
+        incident_id: `${cam.id}:mock:blocked_exit:${cycleCount}`, ts: t,
+        elapsed_seconds: elapsed, duration_seconds: 5, phase: elapsed >= 5.4 ? 'alerted' : 'timing',
       })
     }
-    broadcast({
-      type: 'state',
-      camera: { camera_id: cam.id, online: true, fps: monitoring ? 14.6 + Math.random() * 0.6 : 0 },
-      rule_states: ruleStates,
-    })
+    broadcast({ type: 'state', data: { camera_id: cam.id, ts: t, rule_states: ruleStates } })
+    if (Math.round(t * 5) % 5 === 0) broadcast({ type: 'camera_status', data: cameraStatus(cam) })
   }
 
   if (!monitoring) return
@@ -186,18 +213,18 @@ setInterval(() => {
     firedThisCycle.add('clear_bag')
     makeAlert({
       camera_id: 'cam_entrance', rule_id: 'clear_bag', rule_name: 'Bags should be clear', track_id: 9 + cycleCount,
-      severity: 'review', title: 'Bag is probably not clear',
-      observation: 'A handbag at the main entrance looks opaque. Worth a quick look.',
-      confidence: 0.78, evidence_image: `/evidence/cam_entrance_${cycleCount}.svg`, bbox: [0.5, 0.42, 0.58, 0.58],
+      object_class: 'handbag', elapsed_seconds: 1, severity: 'review', title: 'Possible non-clear bag',
+      observation: 'A handbag in the Main entrance zone is probably not a clear bag (mock verifier).',
+      confidence: 0.78, evidence_image_url: `/evidence/cam_entrance_${cycleCount}.svg`, bbox: [0.5, 0.42, 0.58, 0.58],
     })
   }
   if (t > 8.4 && !firedThisCycle.has('blocked_exit')) {
     firedThisCycle.add('blocked_exit')
     makeAlert({
       camera_id: 'cam_exit', rule_id: 'blocked_exit', rule_name: 'Keep the exit clear', track_id: 14 + cycleCount,
-      severity: 'urgent', title: 'Possible blocked exit',
-      observation: 'A backpack has probably been sitting in the exit doorway for 5.4 seconds.',
-      confidence: 0.91, evidence_image: `/evidence/cam_exit_${cycleCount}.svg`, bbox: [0.46, 0.72, 0.55, 0.88],
+      object_class: 'backpack', elapsed_seconds: 5.4, severity: 'urgent', title: 'Possible exit obstruction',
+      observation: 'A backpack was observed inside the Emergency exit zone for 5.4 seconds, allowing brief detection gaps.',
+      confidence: 0.91, evidence_image_url: `/evidence/cam_exit_${cycleCount}.svg`, bbox: [0.46, 0.72, 0.55, 0.88],
     })
   }
 }, 200)

@@ -19,6 +19,10 @@ export function ruleCondition(rule: Rule): string {
   if (rule.attribute?.name === 'professional') {
     return rule.attribute.expected ? `A ${what} is probably not professional` : `A ${what} is probably professional`
   }
+  if (rule.attribute?.name === 'hard_hat' || rule.attribute?.name === 'safety_vest') {
+    const gear = rule.attribute.name === 'hard_hat' ? 'a hard hat' : 'a hi-vis vest'
+    return rule.attribute.expected ? `A ${what} is probably without ${gear}` : `A ${what} is probably wearing ${gear}`
+  }
   return `A ${what} is seen in the ${zoneLabel(rule.zone)}`
 }
 

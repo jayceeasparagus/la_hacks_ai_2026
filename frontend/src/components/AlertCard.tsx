@@ -1,6 +1,7 @@
 // One alert in the sidebar: evidence, hedged wording, and the operator's decision buttons.
 // The system never acts on its own; an alert only changes when a person decides.
 import { useState } from 'react'
+import { createdSeconds } from '../api'
 import { percent, relativeTime } from '../format'
 import type { Alert, Decision } from '../types'
 import Snippet from './Snippet'
@@ -16,14 +17,12 @@ interface Props {
 }
 
 const DECISIONS: { value: Decision; label: string; key: string }[] = [
-  { value: 'confirm', label: 'Confirm', key: 'C' },
-  { value: 'dismiss', label: 'Dismiss', key: 'D' },
+  { value: 'confirmed', label: 'Confirm', key: 'C' },
+  { value: 'dismissed', label: 'Dismiss', key: 'D' },
   { value: 'unclear', label: 'Unsure', key: 'U' },
 ]
 
-const RESOLVED: Record<Decision, string> = { confirm: 'Confirmed', dismiss: 'Dismissed', unclear: 'Marked unsure' }
-
-const RESULT: Record<string, string> = { confirmed: 'Confirmed', dismissed: 'Dismissed', unclear: 'Marked unsure' }
+const RESULT: Record<Decision, string> = { confirmed: 'Confirmed', dismissed: 'Dismissed', unclear: 'Marked unsure' }
 
 export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolving, snippet, onDecide }: Props) {
   const [busy, setBusy] = useState(false)
@@ -33,15 +32,15 @@ export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolvi
   if (!open) {
     return (
       <div className="chip-in flex shrink-0 items-center gap-3 py-1.5 text-[14px]">
-        {(snippet?.frames[snippet.detectAt] ?? alert.evidence_image) && (
+        {(snippet?.frames[snippet.detectAt] ?? alert.evidence_image_url) && (
           <img
-            src={snippet?.frames[snippet.detectAt] ?? alert.evidence_image!}
+            src={snippet?.frames[snippet.detectAt] ?? alert.evidence_image_url!}
             alt=""
             className="h-9 w-16 shrink-0 object-cover"
           />
         )}
         <span className="min-w-0 flex-1 truncate text-muted">{alert.title}</span>
-        <span className="shrink-0 text-[13px] text-dim">{RESULT[alert.status]}</span>
+        <span className="shrink-0 text-[13px] text-dim">{alert.decision ? RESULT[alert.decision] : 'Reviewed'}</span>
       </div>
     )
   }
@@ -67,7 +66,7 @@ export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolvi
               <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
                 <path className="marker-draw" pathLength={1} d="M3 9.5 L7.5 14 L15 4.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              {RESOLVED[resolving]}
+              {RESULT[resolving]}
             </span>
           </div>
         )}
@@ -75,7 +74,7 @@ export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolvi
       <div className="flex flex-col gap-1">
         <span className="text-[13px] text-muted">
           <span className={urgent ? 'text-accent-soft' : 'text-text'}>{urgent ? 'Urgent' : 'Review'}</span> · {cameraName} ·{' '}
-          {relativeTime(alert.created_at)}
+          {relativeTime(createdSeconds(alert))}
         </span>
         <span className="text-[18px] font-medium leading-[23px] tracking-[-0.01em] text-text">{alert.title}</span>
         <span className="text-[14px] leading-[19px] text-muted">{alert.observation}</span>
@@ -103,18 +102,28 @@ export default function AlertCard({ alert, cameraName, isNew, shortcuts, resolvi
 }
 
 function Evidence({ alert, snippet }: { alert: Alert; snippet?: Props['snippet'] }) {
-  const box = alert.bbox
-  if (!snippet && !alert.evidence_clip && !alert.evidence_image) return null
+  const image = alert.evidence_image_url
+  const clip = alert.evidence_clip_url
+  if (!snippet && !clip && !image) {
+    if (alert.evidence_status !== 'pending') return null
+    return (
+      <div className="flex aspect-video items-center justify-center rounded-[4px] bg-black text-[13px] text-muted">
+        Saving evidence…
+      </div>
+    )
+  }
+  // the backend draws the box on its own evidence; only frames captured in this browser need one
+  const box = image?.startsWith('data:') && !clip ? alert.bbox : null
   return (
     <div className="relative aspect-video overflow-hidden bg-black">
       {snippet ? (
         <Snippet frames={snippet.frames} detectAt={snippet.detectAt} />
-      ) : alert.evidence_clip ? (
-        <video src={alert.evidence_clip} autoPlay muted loop playsInline className="h-full w-full object-cover" />
+      ) : clip ? (
+        <video src={clip} poster={image ?? undefined} autoPlay muted loop playsInline className="h-full w-full object-cover" />
       ) : (
-        <img src={alert.evidence_image!} alt="Evidence frame" className="h-full w-full object-cover" />
+        <img src={image!} alt="Evidence frame" className="h-full w-full object-cover" />
       )}
-      {box && !alert.evidence_clip && (
+      {box && (
         <div
           className="absolute rounded-sm border-2 border-[#F1EEE6]"
           style={{ left: `${box[0] * 100}%`, top: `${box[1] * 100}%`, width: `${(box[2] - box[0]) * 100}%`, height: `${(box[3] - box[1]) * 100}%` }}
