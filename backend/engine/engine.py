@@ -1,8 +1,9 @@
 """Camera-local temporal rule engine. All timing uses source timestamps."""
 
 from dataclasses import dataclass
+import logging
 import time
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
 from app.models import Alert, Rule, RuleState, Track, TrackFrame, Zone
@@ -10,6 +11,11 @@ from engine.alerts import attribute_alert, obstruction_alert, utc_now
 from engine.images import ImageSample, best_sample
 from engine.verification import Ticket, VerificationScheduler, default_scheduler, unavailable
 from engine.zones import bbox_in_zone, validate_polygon
+
+if TYPE_CHECKING:
+    from engine.evidence import EvidenceWriter
+
+log = logging.getLogger('policylens.engine')
 
 
 def bbox_iou(a, b) -> float:
@@ -45,6 +51,7 @@ class _Check:
     elapsed: float
     created_at: str
     ticket: Ticket | None
+    evidence_frames: list
 
 
 class RuleEngine:
@@ -57,7 +64,8 @@ class RuleEngine:
     def __init__(self, camera_id: str, zones: list[Zone], rules: list[Rule], *,
                  session_id: str | None = None,
                  clock: Callable[[], str] = utc_now,
-                 scheduler: VerificationScheduler | None = None):
+                 scheduler: VerificationScheduler | None = None,
+                 evidence_writer: 'EvidenceWriter | None' = None):
         if not camera_id:
             raise ValueError('camera_id is required')
         if len({zone.id for zone in zones}) != len(zones):
@@ -85,6 +93,12 @@ class RuleEngine:
             self.scheduler = default_scheduler()
         self._checks: dict[str, _Check] = {}
         self._track_tickets: dict[tuple[str, int], Ticket] = {}
+        self.evidence_writer = evidence_writer
+        self._evidence_jobs = {}
+        self._buffer = None
+        if evidence_writer is not None:
+            from engine.evidence import FrameBuffer
+            self._buffer = FrameBuffer()
 
     def reset(self) -> None:
         """Start a new session; old incident IDs can never collide with new ones."""
@@ -92,6 +106,10 @@ class RuleEngine:
             self.scheduler.cancel_session(self.camera_id, self.session_id)
         self._checks.clear()
         self._track_tickets.clear()
+        if self._buffer is not None:
+            self._buffer.clear()
+        # Already-created alerts retain their evidence jobs across a reconnect.
+        # Each job owns its old-session snapshot and cannot mix in new frames.
         self._incidents.clear()
         self._sequence = 0
         self._last_ts = None
@@ -123,6 +141,8 @@ class RuleEngine:
         if self._last_ts is not None and tf.ts <= self._last_ts:
             raise ValueError('Timestamps must strictly increase; reset before rewind')
         self._last_ts = tf.ts
+        if self._buffer is not None:
+            self._buffer.remember(frame, tf.ts)
         states, alerts = [], []
         all_tracks = {track.track_id: track for track in tf.tracks}
         for rule in self.rules:
@@ -193,12 +213,14 @@ class RuleEngine:
                 elif not incident.alerted and elapsed >= rule.duration_seconds - 1e-9:
                     incident.alerted = True
                     incident.phase = 'alerted'
-                    alerts.append(obstruction_alert(
+                    alert = obstruction_alert(
                         incident_id=incident.id, camera_id=self.camera_id, rule=rule,
                         track=track, ts=tf.ts, elapsed=elapsed,
                         confidence=incident.confidence_sum / incident.observations,
                         zone_name=zone.name, created_at=self.clock(),
-                    ))
+                    )
+                    self._capture_evidence(alert, frame, tf.ts)
+                    alerts.append(alert)
                 states.append(self._state(rule, incident, tf.ts, incident.phase))
 
             for key, incident in self._incidents.items():
@@ -247,7 +269,8 @@ class RuleEngine:
         incident.phase = 'verifying'
         self._checks[incident.id] = _Check(
             incident.id, rule, (incident.best.track if incident.best else incident.track),
-            incident.best, ts, elapsed, self.clock(), ticket)
+            incident.best, ts, elapsed, self.clock(), ticket,
+            self._buffer.snapshot(ts) if self._buffer is not None else [])
 
     def poll_verifications(self) -> list[Alert]:
         """Collect results even when video is paused; does not advance source time."""
@@ -266,11 +289,59 @@ class RuleEngine:
                 active.alerted = violation
                 active.best = None
             if violation:
-                alerts.append(attribute_alert(
+                alert = attribute_alert(
                     incident_id=incident_id, camera_id=self.camera_id, rule=check.rule,
                     track=check.track, verdict=verdict, ts=check.ts, elapsed=check.elapsed,
-                    created_at=check.created_at))
+                    created_at=check.created_at)
+                sample = check.sample
+                self._capture_evidence(alert, sample.image if sample else None,
+                    sample.ts if sample else check.ts, check.evidence_frames)
+                alerts.append(alert)
         return alerts
+
+    def _capture_evidence(self, alert, image, snapshot_ts, frames=None):
+        if self.evidence_writer is None:
+            return
+        if frames is None:
+            frames = self._buffer.snapshot(alert.ts)
+        try:
+            ticket = self.evidence_writer.submit(alert, image, frames, snapshot_ts=snapshot_ts)
+        except Exception:
+            log.warning('Evidence submission failed camera=%s alert=%s', self.camera_id, alert.id)
+            return
+        if ticket is not None:
+            alert.evidence_status = 'pending'
+            self._evidence_jobs[alert.id] = ticket
+        else:
+            log.warning('Evidence queue full or image unavailable camera=%s alert=%s',
+                        self.camera_id, alert.id)
+
+    def poll_evidence(self):
+        """Return completed evidence patches, not duplicate new alerts.
+
+        The app should apply each patch to its latest stored alert and broadcast
+        alert_updated. A shared writer cannot steal another camera's results.
+        """
+        results = []
+        for alert_id, ticket in list(self._evidence_jobs.items()):
+            result = self.evidence_writer.poll(ticket)
+            if result is not None:
+                results.append(result)
+                del self._evidence_jobs[alert_id]
+        return results
+
+    def drain_evidence(self, timeout=10):
+        """Blocking EOF/shutdown helper; live workers use poll_evidence instead."""
+        deadline = time.monotonic() + timeout
+        results = []
+        while self._evidence_jobs:
+            results.extend(self.poll_evidence())
+            if not self._evidence_jobs:
+                break
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Evidence drain timed out')
+            time.sleep(0.002)
+        return results
 
     def drain_verifications(self, timeout=5) -> list[Alert]:
         """Blocking replay/shutdown helper; never call from a live frame loop."""
