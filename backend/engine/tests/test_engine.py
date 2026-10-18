@@ -40,6 +40,13 @@ class TemporalEngineTests(unittest.TestCase):
         self.assertIsNone(alerts[0].evidence_clip_url)
 
 
+    def test_one_alert_per_incident(self):
+        engine = self.engine()
+        alerts = self.run_frames(engine, [self.frame(tick / 10) for tick in range(81)])
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0].ts, 5)
+
+
     def test_wrong_camera_and_rewind_do_not_mutate_state(self):
         engine = self.engine()
         engine.update(None, self.frame(1))
@@ -56,6 +63,18 @@ class TemporalEngineTests(unittest.TestCase):
         engine.reset()
         second = self.run_frames(engine, frames)[0]
         self.assertNotEqual(first.id, second.id)
+
+
+    def test_disabled_rules_and_configuration_copy(self):
+        zones, rules = synthetic_config()
+        engine = RuleEngine('cam_exit', zones, rules)
+        rules[0].duration_seconds = 600
+        zones[0].polygon.clear()
+        self.assertEqual(len(self.run_frames(engine, scenario('exit_bag'))), 1)
+        zones, rules = synthetic_config()
+        rules[0].enabled = False
+        engine = RuleEngine('cam_exit', zones, rules)
+        self.assertEqual(self.run_frames(engine, scenario('exit_bag')), [])
 
 
     def test_missing_zone_and_invalid_polygon_rejected(self):

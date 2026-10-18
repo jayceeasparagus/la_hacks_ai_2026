@@ -115,7 +115,7 @@ class RuleEngine:
                 incident.confidence_sum += track.confidence
                 incident.observations += 1
                 elapsed = tf.ts - incident.entered
-                if elapsed >= rule.duration_seconds - 1e-9:
+                if not incident.alerted and elapsed >= rule.duration_seconds - 1e-9:
                     incident.alerted = True
                     alerts.append(obstruction_alert(
                         incident_id=incident.id, camera_id=self.camera_id, rule=rule,
