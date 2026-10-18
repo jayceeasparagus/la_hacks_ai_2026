@@ -48,8 +48,20 @@ This uses two synthetic sources at real speed, an explicit unclear stub verifier
 TestClient HTTP/WebSocket, the actual workers, SQLite and evidence writer. The
 five-minute run expects 45 distinct incidents, each reviewed through HTTP and
 with ready evidence. `--seconds 20` is only a short wiring check (3 incidents).
-The earlier branch's five-minute measurements in prior revisions are historical;
-merged-backend results are recorded below after validation.
+The merged backend completed **300.095 seconds** without restart:
+
+| Metric | Result |
+| --- | ---: |
+| Distinct alerts/incidents | 45 |
+| Decisions saved through HTTP | 45 |
+| Alerts with ready evidence | 45 |
+| Duplicate incident IDs | 0 |
+| WebSocket messages received | 2,947 |
+| Sampled thread count | 6 initially, at most 9 |
+| Peak RSS (macOS process high-water mark) | approximately 216 MiB |
+
+These measurements use synthetic sources and an unclear stub, not real camera or
+Gemini performance. The earlier branch's measurements remain historical in Git.
 
 ## Remaining validation
 
