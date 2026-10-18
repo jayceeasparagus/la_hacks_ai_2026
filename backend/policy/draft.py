@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from policy.contracts import Zone
+from policy.contracts import SUPPORTED_ATTRIBUTES, Zone
 
 UNKNOWN_ZONE = "UNKNOWN"
 
@@ -20,7 +20,7 @@ class DraftRule(BaseModel):
         description="Detectable objects this rule applies to"
     )
     zone_id: str = Field(description="Id of the zone this rule applies to, or UNKNOWN if unclear")
-    attribute_name: Literal["transparent", "professional"] | None = Field(
+    attribute_name: Literal["transparent", "professional", "lying_down"] | None = Field(
         description="Attribute to check for object_attribute rules, otherwise null"
     )
     attribute_expected: bool | None = Field(
@@ -43,8 +43,12 @@ class DraftPolicy(BaseModel):
 def build_draft_schema(zones: list[Zone]) -> dict:
     """JSON schema for DraftPolicy with zone_id restricted to the real zone ids plus UNKNOWN."""
     schema = structured_output_schema(DraftPolicy)
-    zone_id = schema["properties"]["rules"]["items"]["properties"]["zone_id"]
-    zone_id["enum"] = [z.id for z in zones] + [UNKNOWN_ZONE]
+    properties = schema["properties"]["rules"]["items"]["properties"]
+    properties["zone_id"]["enum"] = [z.id for z in zones] + [UNKNOWN_ZONE]
+    # Offer only the attributes the shared contracts support (lying_down is a stretch goal).
+    for option in properties["attribute_name"]["anyOf"]:
+        if "enum" in option:
+            option["enum"] = [name for name in option["enum"] if name in SUPPORTED_ATTRIBUTES]
     return schema
 
 

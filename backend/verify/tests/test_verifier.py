@@ -54,7 +54,7 @@ def test_garbage_input_never_raises(crop):
 
 
 def test_unknown_check_never_raises():
-    assert verify_crop(BRIGHT, "person_down").answer is None
+    assert verify_crop(BRIGHT, "no_such_check").answer is None
 
 
 def test_fake_mode_is_deterministic():
@@ -62,6 +62,17 @@ def test_fake_mode_is_deterministic():
     assert verify_crop(DARK, "transparent_bag").answer is False
     assert verify_crop(DARK, "professional_camera").answer is True
     assert verify_crop(BRIGHT, "professional_camera").answer is False
+
+
+def test_fake_person_down_uses_box_shape():
+    assert verify_crop(np.zeros((80, 200, 3), np.uint8), "person_down").answer is True
+    assert verify_crop(np.zeros((200, 80, 3), np.uint8), "person_down").answer is False
+
+
+def test_every_attribute_has_a_check():
+    from verify.prompts import CHECK_FOR_ATTRIBUTE, QUESTIONS
+
+    assert set(CHECK_FOR_ATTRIBUTE.values()) == set(QUESTIONS)
 
 
 def test_encode_resizes_longer_side_to_512():

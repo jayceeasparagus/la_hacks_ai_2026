@@ -18,4 +18,21 @@ Is it a large, professional-style camera?
   binoculars, or anything that is not a camera.
 - Answer "unclear" if there is no device, it is mostly hidden, or the image is too blurry or dark.
 Give a confidence from 0 to 1 and a short reason.""",
+    # Stretch goal: only used once the contracts support a lying_down attribute.
+    "person_down": """\
+This is a cropped frame from a venue camera. Look at the main person in the image.
+Is this person lying on the floor or ground, as if they fell or collapsed?
+- Answer "yes" if their body is lying flat or slumped on the floor or ground.
+- Answer "no" if they are standing, walking, sitting on a chair or bench, kneeling, crouching,
+  bending over, or lying on a bed, couch or sun lounger.
+- Answer "unclear" if there is no person, they are mostly hidden, or the image is too blurry or dark.
+Give a confidence from 0 to 1 and a short reason.""",
+}
+
+# Which check verifies which Rule attribute. The engine verifies a rule's crop with
+# CHECK_FOR_ATTRIBUTE[rule.attribute.name].
+CHECK_FOR_ATTRIBUTE = {
+    "transparent": "transparent_bag",
+    "professional": "professional_camera",
+    "lying_down": "person_down",
 }

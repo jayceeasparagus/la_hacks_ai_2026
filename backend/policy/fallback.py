@@ -9,7 +9,9 @@ import re
 
 from policy.contracts import Zone
 from policy.draft import UNKNOWN_ZONE, DraftPolicy, DraftRule
-from policy.synonyms import BAGS, classify_unsupported, objects_in_text, parse_duration, zones_named_in
+from policy.synonyms import (
+    BAGS, PERSON_DOWN, classify_unsupported, objects_in_text, parse_duration, zones_named_in,
+)
 
 log = logging.getLogger("policylens.policy")
 
@@ -41,6 +43,13 @@ def compile_fallback(prompt: str, zones: list[Zone]) -> DraftPolicy | None:
             last_zone = named[0]
         found: list[DraftRule] = []
 
+        if PERSON_DOWN.search(low) and "person" in objects_in_text(clause):
+            # capability.py turns this into a rule or an unsupported note, depending on the contracts.
+            found.append(DraftRule(
+                source_text=clause, type="persistent_object", objects=["person"],
+                zone_id=named[0].id if named else UNKNOWN_ZONE, attribute_name="lying_down",
+                attribute_expected=False, duration_seconds=parse_duration(clause), severity="urgent",
+            ))
         if CLEAR_BAG.search(low):
             found.append(_attribute_rule(clause, BAGS, zone, "transparent", True))
         if PRO_CAMERA.search(low):

@@ -5,7 +5,10 @@ import re
 
 from policy.contracts import SUPPORTED_ATTRIBUTES, Attribute, CompileResult, Rule, Zone
 from policy.draft import DraftPolicy, DraftRule
-from policy.synonyms import BAGS, GENERIC_UNSUPPORTED, classify_unsupported, default_severity, normalize_objects, zones_named_in
+from policy.synonyms import (
+    BAGS, GENERIC_UNSUPPORTED, PERSON_DOWN, PERSON_DOWN_UNSUPPORTED, classify_unsupported, default_severity,
+    normalize_objects, person_down_enabled, zones_named_in,
+)
 
 MIN_DURATION_S = 0.5
 MAX_DURATION_S = 600.0
@@ -23,10 +26,11 @@ _BIG_CAMERA_WORDS = re.compile(r"\b(professional|pro|dslrs?|big|large|video|cine
 
 def finalize(draft: DraftPolicy, zones: list[Zone]) -> CompileResult:
     warnings: list[str] = []
+    unsupported: list[str] = list(draft.unsupported)
     rules: list[Rule] = []
     used_default_duration = False
     for draft_rule in draft.rules:
-        rule, defaulted = _finalize_rule(draft_rule, zones, warnings)
+        rule, defaulted = _finalize_rule(draft_rule, zones, warnings, unsupported)
         used_default_duration |= defaulted
         if rule is not None:
             rules.append(rule)
@@ -43,16 +47,20 @@ def finalize(draft: DraftPolicy, zones: list[Zone]) -> CompileResult:
         if note and not (used_default_duration and _DURATION_NOTE.search(note)):
             warnings.append(note)
 
-    return CompileResult(rules=rules, warnings=_unique(warnings), unsupported=_clean_unsupported(draft.unsupported))
+    return CompileResult(rules=rules, warnings=_unique(warnings), unsupported=_clean_unsupported(unsupported))
 
 
-def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str]) -> tuple[Rule | None, bool]:
+def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str],
+                   unsupported: list[str]) -> tuple[Rule | None, bool]:
     source = _clean(d.source_text) or "this rule"
     quote = f"'{_shorten(source)}'"
 
     objects, dropped = normalize_objects(list(d.objects))
     if dropped:
         warnings.append(f"Ignored {', '.join(dropped)} in {quote}: I can only detect bags, chairs, people and cameras.")
+
+    if d.attribute_name == "lying_down" or ("person" in objects and PERSON_DOWN.search(source.lower())):
+        return _person_down_rule(d, source, quote, zones, warnings, unsupported)
 
     rule_type = d.type
     attribute = None
@@ -96,19 +104,7 @@ def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str]) -> tupl
     if zone is None:
         return None, False
 
-    defaulted = False
-    duration = d.duration_seconds
-    if duration is None:
-        if rule_type == "persistent_object":
-            duration = DEFAULT_PERSISTENT_DURATION_S
-            defaulted = True
-            warnings.append(f"No time limit given for {quote}; using {_fmt(duration)} seconds.")
-        else:
-            duration = DEFAULT_ATTRIBUTE_DURATION_S
-    elif not MIN_DURATION_S <= duration <= MAX_DURATION_S:
-        duration = min(max(duration, MIN_DURATION_S), MAX_DURATION_S)
-        warnings.append(f"Adjusted the time in {quote} to {_fmt(duration)} seconds (the allowed range is 0.5 s to 10 minutes).")
-
+    duration, defaulted = _duration(d.duration_seconds, rule_type, quote, warnings)
     severity = d.severity or default_severity(source)
 
     rule = Rule(
@@ -116,6 +112,38 @@ def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str]) -> tupl
         duration_seconds=duration, severity=severity,
     )
     return rule, defaulted
+
+
+def _person_down_rule(d: DraftRule, source: str, quote: str, zones: list[Zone], warnings: list[str],
+                      unsupported: list[str]) -> tuple[Rule | None, bool]:
+    """Stretch goal: a persistent rule on people whose crop is verified as lying down.
+    Only produced once the contracts support lying_down; until then it is reported as unsupported."""
+    if not person_down_enabled():
+        unsupported.append(PERSON_DOWN_UNSUPPORTED)
+        return None, False
+    zone = _pick_zone(d.zone_id, source, quote, zones, warnings)
+    if zone is None:
+        return None, False
+    duration, defaulted = _duration(d.duration_seconds, "persistent_object", quote, warnings)
+    rule = Rule(
+        id="", name="", type="persistent_object", objects=["person"], zone=zone.id,
+        attribute=Attribute(name="lying_down", expected=False), duration_seconds=duration,
+        severity=d.severity or "urgent",
+    )
+    return rule, defaulted
+
+
+def _duration(seconds: float | None, rule_type: str, quote: str, warnings: list[str]) -> tuple[float, bool]:
+    """(duration, whether the default was used): defaults, clamping and the matching warnings."""
+    if seconds is None:
+        if rule_type == "object_attribute":
+            return DEFAULT_ATTRIBUTE_DURATION_S, False
+        warnings.append(f"No time limit given for {quote}; using {_fmt(DEFAULT_PERSISTENT_DURATION_S)} seconds.")
+        return DEFAULT_PERSISTENT_DURATION_S, True
+    if not MIN_DURATION_S <= seconds <= MAX_DURATION_S:
+        seconds = min(max(seconds, MIN_DURATION_S), MAX_DURATION_S)
+        warnings.append(f"Adjusted the time in {quote} to {_fmt(seconds)} seconds (the allowed range is 0.5 s to 10 minutes).")
+    return seconds, False
 
 
 def _pick_zone(zone_id: str, source: str, quote: str, zones: list[Zone], warnings: list[str]) -> Zone | None:
@@ -161,6 +189,8 @@ def _assign_ids_and_names(rules: list[Rule], zones: list[Zone]) -> None:
 
 
 def _purpose(rule: Rule, zone_name: str) -> tuple[str, str]:
+    if rule.attribute is not None and rule.attribute.name == "lying_down":
+        return "person_down", "Possible person down"
     if rule.type == "object_attribute" and rule.attribute is not None:
         if rule.attribute.name == "transparent":
             return "clear_bag", "Clear-bag policy"

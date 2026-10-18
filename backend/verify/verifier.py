@@ -20,7 +20,7 @@ from verify.prompts import QUESTIONS
 
 log = logging.getLogger("policylens.verify")
 
-Check = Literal["transparent_bag", "professional_camera"]
+Check = Literal["transparent_bag", "professional_camera", "person_down"]
 
 MIN_SIDE_PX = 40
 MAX_SIDE_PX = 512
@@ -123,9 +123,13 @@ def encode_jpeg(crop: np.ndarray) -> bytes:
 
 
 def _fake_answer(crop: np.ndarray, check: str) -> VisionAnswer:
-    """Deterministic offline verdicts so engine tests never hit the network:
-    bright crops are clear bags, dark crops are professional cameras."""
+    """Deterministic offline verdicts so engine tests never hit the network: bright crops are
+    clear bags, dark crops are professional cameras, wide crops are people lying down."""
     brightness = float(crop.mean())
+    if check == "person_down":
+        height, width = crop.shape[:2]
+        answer = "yes" if width > 1.2 * height else "no"
+        return VisionAnswer(answer=answer, confidence=0.9, reason=f"offline fake verdict (box {width}x{height})")
     if check == "transparent_bag":
         answer = "yes" if brightness >= 128 else "no"
     else:

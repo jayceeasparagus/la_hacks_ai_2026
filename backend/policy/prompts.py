@@ -3,7 +3,7 @@
 import json
 
 from policy.contracts import Zone
-from policy.synonyms import BAGS
+from policy.synonyms import BAGS, person_down_enabled
 
 SYSTEM_PROMPT = """\
 You compile venue policies written by event organizers into monitoring rules for PolicyLens,
@@ -148,11 +148,36 @@ def _render_example(zones: list[dict], policy: str, output: dict) -> str:
     )
 
 
+PERSON_DOWN_ON = """\
+- Extra attribute: lying_down (only for person): is the person lying on the floor, as if they fell?
+  For "alert if someone is on the floor / collapses for N seconds" use persistent_object with
+  objects ["person"], attribute_name "lying_down", attribute_expected false, severity "urgent".
+  This is the only case where persistent_object may use "person".
+"""
+PERSON_DOWN_OFF = """\
+- People lying down, fallen or collapsed cannot be checked yet; put such requests in "unsupported".
+"""
+
+PERSON_DOWN_SHOT = (
+    DEMO_ZONES,
+    "Alert if someone is on the floor at the main entrance for more than 10 seconds.",
+    {
+        "rules": [
+            _rule("Alert if someone is on the floor at the main entrance for more than 10 seconds",
+                  "persistent_object", ["person"], "main_entrance", "lying_down", False, 10, "urgent"),
+        ],
+        "unsupported": [],
+        "ambiguities": [],
+    },
+)
+
+
 def build_system_prompt() -> str:
-    examples = "\n\n".join(
-        f"EXAMPLE {i}\n{_render_example(*shot)}" for i, shot in enumerate(FEW_SHOTS, start=1)
-    )
-    return f"{SYSTEM_PROMPT}\nEXAMPLES (zones, policy, the exact JSON you should output):\n\n{examples}\n"
+    enabled = person_down_enabled()
+    shots = FEW_SHOTS + ([PERSON_DOWN_SHOT] if enabled else [])
+    examples = "\n\n".join(f"EXAMPLE {i}\n{_render_example(*shot)}" for i, shot in enumerate(shots, start=1))
+    extra = PERSON_DOWN_ON if enabled else PERSON_DOWN_OFF
+    return f"{SYSTEM_PROMPT}{extra}\nEXAMPLES (zones, policy, the exact JSON you should output):\n\n{examples}\n"
 
 
 def build_user_prompt(policy: str, zones: list[Zone]) -> str:

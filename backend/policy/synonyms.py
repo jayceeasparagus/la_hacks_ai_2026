@@ -2,7 +2,7 @@
 
 import re
 
-from policy.contracts import SUPPORTED_OBJECTS, Zone
+from policy.contracts import SUPPORTED_ATTRIBUTES, SUPPORTED_OBJECTS, Zone
 
 BAGS = ["backpack", "handbag", "suitcase"]
 
@@ -16,6 +16,7 @@ OBJECT_SYNONYMS = {
     "stool": ["chair"], "stools": ["chair"],
     "camera": ["camera"], "cameras": ["camera"], "dslr": ["camera"], "dslrs": ["camera"],
     "person": ["person"], "persons": ["person"], "people": ["person"],
+    "someone": ["person"], "somebody": ["person"], "anyone": ["person"], "anybody": ["person"],
 }
 
 
@@ -101,6 +102,23 @@ def zones_named_in(text: str, zones: list[Zone]) -> list[Zone]:
         return []
     best = min(s for s, _, _ in scored)
     return [z for s, _, z in sorted(scored, key=lambda x: (x[0], x[1])) if s == best]
+
+
+# --- person down (stretch goal, needs the lying_down attribute in the contracts) -------------
+
+PERSON_DOWN = re.compile(
+    r"\b(?:on the (?:floor|ground)|(?:lying|laying) (?:down|on)|fallen|fell|collaps\w*|passed out|unconscious"
+    r"|(?:person|man|someone|somebody) down)\b"
+)
+PERSON_DOWN_UNSUPPORTED = (
+    "I can't check whether someone is lying on the floor yet. I can monitor bags, chairs and large cameras "
+    "in the zones you've drawn."
+)
+
+
+def person_down_enabled() -> bool:
+    """True once the shared contracts support the lying_down attribute on person."""
+    return "person" in SUPPORTED_ATTRIBUTES.get("lying_down", [])
 
 
 # --- unsupported requests ---------------------------------------------------------------
