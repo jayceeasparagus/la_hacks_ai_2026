@@ -54,9 +54,14 @@ cameras (`PUT /api/policy` is allowed while monitoring); the videos keep playing
 - The plaza clip is `clips/demo/wildtrack_cam3.mp4`: the WILDTRACK trim scaled to 1280x720 (the size the
   detector uses anyway; the 2.9K original was too heavy to decode live), with tracks from
   `python -m vision.dump` (about 25 min on CPU; ~19 people per frame, ~64 bags over 1 s).
-- Gear checks on the plaza go to Gemini live, once per person: a looping camera remembers each track's
-  answer, so later loops don't ask again. With ~285 people a gear policy still means hundreds of calls on
-  the first loop (2 per second; the rest show "unclear"). Bag bans need no Gemini at all.
+- "No jeans." answers come from `plaza_verdicts.json` (real Gemini answers for the 275 tracks the engine
+  checks; crops under 40 px are saved as unclear), made with
+  `python -B ../demo/cache_verdicts.py --scene ../demo/scenes/site_safety.json --camera cam_plaza --clip plaza --check jeans --out ../demo/plaza_verdicts.json`
+  from `backend/`. Rerun it after re-dumping the tracks (ids change) or for another check; it skips
+  cached keys. Bag bans need no Gemini at all.
+- Hard-hat and vest checks on the plaza aren't cached and go to Gemini live, once per person: a looping
+  camera remembers each track's answer, so later loops don't ask again. That's still ~275 calls on the
+  first loop (2 per second; the rest show "unclear").
 - Scenes can name `cached_verdicts` (`ppe_verdicts.json`, real Gemini answers keyed by clip, track
   id and check), used before any live call. If you change a clip or its tracks, check that every track that can
   reach the 1 s threshold is cached: the engine bridges detection gaps of up to 1 s, so a track with only

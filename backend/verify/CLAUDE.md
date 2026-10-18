@@ -1,7 +1,8 @@
 # backend/verify: crop verifier (Person 2)
 
 `verify_crop(crop, check) -> Verdict` in `verifier.py`. Person 4's engine calls it from a thread pool.
-`crop` is an OpenCV BGR uint8 array. `check` is `transparent_bag`, `professional_camera` or
+`crop` is an OpenCV BGR uint8 array. `check` is `transparent_bag`, `professional_camera`, `hard_hat`,
+`safety_vest`, `jeans` (dress code) or
 `person_down` (stretch). Pick it with `verify.prompts.CHECK_FOR_ATTRIBUTE[rule.attribute.name]`.
 `answer=True` means "yes" to the question (the bag is transparent, the camera is professional,
 the person is down). `None` means unclear, which leads to a manual-review alert.

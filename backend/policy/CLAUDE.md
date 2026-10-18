@@ -81,7 +81,11 @@ Dependencies: google-genai, pydantic, python-dotenv, opencv-python, numpy, pytes
   persistent person rule. The approved contract says person down stays unsupported for the MVP, so
   for now those requests go to `unsupported`.
 
-## Construction-site safety gear (PPE)
+## Construction-site safety gear (PPE) and dress code
+- `jeans` is a dress-code attribute on `person` (contract change approved 2026-10-18): "No jeans" /
+  "Jeans are not allowed" compile to rule `jeans` ("Jeans policy") with expected=false, "Jeans required"
+  to expected=true. Other clothing (shorts, skirts, hats...) goes to `unsupported` via the `other_clothing`
+  topic, whose regex skips "hard hat". Its id must never start with `no_`: that prefix marks object bans.
 - `hard_hat` and `safety_vest` are attributes on `person` (object_attribute rules, expected=true).
   "Safety gear" or "PPE" compiles to both rules. Gloves, goggles, boots, masks and harnesses go to
   `unsupported`.
