@@ -8,7 +8,11 @@ from app.models import Alert, Rule, Track, Verdict
 ATTRIBUTE_TERMS = {
     'transparent': ('clear bag', 'a clear bag'),
     'professional': ('professional camera', 'a professional-style camera'),
+    'hard_hat': ('hard hat', 'wearing a hard hat'),
+    'safety_vest': ('safety vest', 'wearing a safety vest'),
 }
+# Safety gear a person should wear: a violation means the gear is probably missing.
+WEARABLE = {'hard_hat', 'safety_vest'}
 
 
 def utc_now() -> str:
@@ -58,10 +62,14 @@ def attribute_alert(*, incident_id: str, camera_id: str, rule: Rule, track: Trac
     """The verifier's answer differs from the attribute value the rule expects."""
     noun, phrase = ATTRIBUTE_TERMS[rule.attribute.name]
     looks = 'looks like' if verdict.answer else 'is probably not'
+    if rule.attribute.name in WEARABLE:
+        title = f'Possible {noun} worn' if verdict.answer else f'Possible missing {noun}'
+    else:
+        title = f'Possible {noun}' if verdict.answer else f'Possible non-{noun}'
     return _alert(
         incident_id=incident_id, camera_id=camera_id, rule=rule, track=track, ts=ts,
         elapsed=elapsed, confidence=verdict.confidence, created_at=created_at,
-        title=f'Possible {noun}' if verdict.answer else f'Possible non-{noun}',
+        title=title,
         observation=(f'{_article(track.object_class)} {track.object_class} in the '
                      f'{zone_name} zone {looks} {phrase} (verifier: {_reason(verdict)}).'),
     )

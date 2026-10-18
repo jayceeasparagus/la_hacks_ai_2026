@@ -17,7 +17,7 @@ SUPPORTED_ATTRIBUTES = {
     'handbag': ('transparent',),
     'suitcase': ('transparent',),
     'camera': ('professional',),
-    'person': (),
+    'person': ('hard_hat', 'safety_vest'),  # construction-site safety gear
     'chair': (),
 }
 
@@ -40,7 +40,7 @@ class Zone(Model):
 
 
 class Attribute(Model):
-    name: Literal['transparent', 'professional']
+    name: Literal['transparent', 'professional', 'hard_hat', 'safety_vest']
     expected: bool = Field(strict=True)
 
 

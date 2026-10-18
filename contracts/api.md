@@ -22,6 +22,8 @@ Further contract changes require sign-off under `CLAUDE.md`.
 4. **Rules:** retain `id`, `type`, `objects`, `zone`, `attribute`,
    `duration_seconds`, `severity`; add the display `name` and `enabled` flag needed
    by the frontend. `transparent.expected=true` and `professional.expected=false`.
+   Construction-site safety gear: `person` supports `hard_hat` and `safety_vest`
+   (`expected=true`; a violation means the gear is probably missing).
    Person-down and arbitrary exception conditions remain unsupported.
 5. **Verifier:** `Verdict.answer` is strictly `true`, `false`, or `null`.
    Person 2 converts provider `yes/no/unclear` output into these values.
@@ -104,7 +106,7 @@ the persistence mechanism. Slow clients must never block camera workers.
   per-camera models/trackers; `recent_frames(seconds)` supplies evidence frames.
   `crop(frame, bbox, pad=0.15)` accepts the normalized box and converts to pixels.
 - Person 2: `compile_policy(prompt, zones) -> CompileResult` and
-  `verify_crop(crop, check) -> Verdict`; checks are `transparent_bag` and
+  `verify_crop(crop, check) -> Verdict`; checks are `transparent_bag`, `hard_hat`, `safety_vest` and
   `professional_camera`.
 - Person 4: `RuleEngine(camera_id, zones, rules, ...).update(frame, tf)` returns
   `(list[RuleState], list[Alert])`. Asynchronous completions are polled each update
