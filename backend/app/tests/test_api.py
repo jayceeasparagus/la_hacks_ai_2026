@@ -1,6 +1,9 @@
 from pathlib import Path
+import asyncio
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -124,3 +127,28 @@ class ApiTests(unittest.TestCase):
         response = self.client.post('/api/policy/compile', json={'prompt': 'Detect concealed items'})
         self.assertTrue(response.json()['unsupported'])
         self.assertEqual(self.client.post('/api/monitor/start').status_code, 422)
+
+    def test_stream_contains_decodable_multipart_jpeg(self):
+        self.configure()
+        endpoint = next(route.endpoint for route in self.app.routes
+                        if getattr(route, 'path', '') == '/api/stream/{camera_id}')
+        async def connected(): return False
+        response = endpoint('cam_exit', SimpleNamespace(is_disconnected=connected))
+        async def first_chunk():
+            try:
+                return await response.body_iterator.__anext__()
+            finally:
+                await response.body_iterator.aclose()
+        chunk = asyncio.run(first_chunk())
+        self.assertTrue(chunk.startswith(b'--frame\r\nContent-Type: image/jpeg'))
+        self.assertIn(b'\xff\xd8', chunk)
+
+    def test_integrated_mode_does_not_silently_use_demo(self):
+        original_import = __import__
+        def missing_vision(name, *args, **kwargs):
+            if name == 'vision.pipeline':
+                raise ModuleNotFoundError('simulated missing vision module')
+            return original_import(name, *args, **kwargs)
+        with patch('builtins.__import__', side_effect=missing_vision), self.assertRaisesRegex(RuntimeError, 'Integrated mode requires'):
+            with TestClient(create_app(data_dir=self.root / 'integrated', mode='integrated')):
+                pass

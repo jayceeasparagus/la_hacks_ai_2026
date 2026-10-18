@@ -62,6 +62,14 @@ def create_app(*, data_dir=None, mode=None, pipeline_factory=None, compiler=None
 
     @asynccontextmanager
     async def lifespan(app):
+        if selected_mode == 'integrated':
+            try:
+                if pipeline_factory is None:
+                    from vision.pipeline import VisionPipeline  # noqa: F401
+                if compiler is None:
+                    from policy.compiler import compile_policy  # noqa: F401
+            except ImportError:
+                raise RuntimeError('Integrated mode requires the vision and policy modules and their dependencies') from None
         settings = ConfigurationStore(root / 'config.json')
         store = AlertStore(root / 'alerts.sqlite3')
         hub = EventHub()
