@@ -1,0 +1,31 @@
+{
+  "name": "Lobby: left bags (CAVIAR, real footage)",
+  "description": "Three ceiling cameras in a lobby. A bag is left on the exit walkway, by the seating area, and at the reception desk (later picked up). People walk through every zone and must never trigger a bag rule. Tracks are CAVIAR's hand-labelled ground truth replayed over the real video, so this scene runs with no detector and no Gemini key.",
+  "policy": "Keep the exit walkway clear; alert if a bag or chair blocks it for more than 5 seconds. Alert if a bag is left in the seating area for more than 10 seconds. Alert if a bag is left at the reception desk for more than 10 seconds.",
+  "cameras": [
+    {"id": "cam_lobby_east", "name": "Lobby east walkway", "source": "replay:../../clips/caviar/LeftBag.tracks.jsonl@../../clips/caviar/LeftBag.mpg"},
+    {"id": "cam_lobby_seating", "name": "Lobby seating", "source": "replay:../../clips/caviar/LeftBag_AtChair.tracks.jsonl@../../clips/caviar/LeftBag_AtChair.mpg"},
+    {"id": "cam_lobby_desk", "name": "Lobby reception", "source": "replay:../../clips/caviar/LeftBag_PickedUp.tracks.jsonl@../../clips/caviar/LeftBag_PickedUp.mpg"}
+  ],
+  "zones": [
+    {"id": "exit_walkway", "camera_id": "cam_lobby_east", "name": "Exit walkway",
+     "polygon": [[0.70, 0.22], [0.93, 0.22], [0.93, 0.66], [0.70, 0.66]]},
+    {"id": "seating_area", "camera_id": "cam_lobby_seating", "name": "Seating area",
+     "polygon": [[0.04, 0.30], [0.30, 0.30], [0.30, 0.56], [0.04, 0.56]]},
+    {"id": "reception_desk", "camera_id": "cam_lobby_desk", "name": "Reception desk",
+     "polygon": [[0.44, 0.03], [0.70, 0.03], [0.70, 0.26], [0.44, 0.26]]}
+  ],
+  "rules": [
+    {"id": "blocked_exit", "name": "Exit obstruction", "type": "persistent_object",
+     "objects": ["backpack", "handbag", "suitcase", "chair"], "zone": "exit_walkway",
+     "duration_seconds": 5, "severity": "urgent"},
+    {"id": "unattended_bag", "name": "Unattended bag", "type": "persistent_object",
+     "objects": ["backpack", "handbag", "suitcase"], "zone": "seating_area",
+     "duration_seconds": 10, "severity": "review"},
+    {"id": "unattended_bag_2", "name": "Unattended bag", "type": "persistent_object",
+     "objects": ["backpack", "handbag", "suitcase"], "zone": "reception_desk",
+     "duration_seconds": 10, "severity": "review"}
+  ],
+  "needs": [],
+  "credits": ["Video and ground truth: EC Funded CAVIAR project/IST 2001 37540, CC BY-SA (homepages.inf.ed.ac.uk/rbf/CAVIARDATA1/)"]
+}

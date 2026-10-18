@@ -6,6 +6,7 @@ Environment:
 - POLICYLENS_DATA_DIR      settings/, alerts.db and evidence/ (default backend/data)
 - POLICYLENS_SEED_DEMO=1   write the demo cameras, zones and rules if none are saved
 - POLICYLENS_DEMO_SOURCES=synthetic   seed the demo cameras with synthetic scenes (no webcam)
+- POLICYLENS_SCENE=<file>  load a demo scene (cameras, zones, rules) at startup, replacing saved ones
 - POLICYLENS_FAKE_LLM=1    offline compiler and verifier (no network)
 - POLICYLENS_SOURCE_SPEED  playback speed multiplier for synthetic/replay sources
 """
@@ -109,6 +110,12 @@ def settings_status(error: SettingsError) -> int:
 
 
 def seed(settings: Settings) -> None:
+    scene = os.getenv('POLICYLENS_SCENE', '').strip()
+    if scene:
+        from app.scenes import load_scene
+        loaded = load_scene(Path(scene), settings)
+        log.info('Loaded demo scene %r from %s', loaded.name, scene)
+        return
     if not _env_flag('POLICYLENS_SEED_DEMO'):
         return
     if (os.getenv('POLICYLENS_DEMO_SOURCES', '').strip().lower() == 'synthetic'

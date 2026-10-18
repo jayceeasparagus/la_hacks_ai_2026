@@ -11,6 +11,7 @@ Source strings:
 - `synthetic:<scenario>` -> engine.fake_tracks scenarios or the local entrance
   scenes below, rendered as images and looped forever at real speed.
 - `replay:<tracks.jsonl>` -> approved TrackFrame JSONL at real speed; ends after the file.
+- `replay:<tracks.jsonl>@<video>` -> the same tracks played over the real video they describe.
 
 Errors never contain the source string: camera URLs may carry credentials.
 `POLICYLENS_SOURCE_SPEED` multiplies playback speed of synthetic and replay sources.
@@ -223,6 +224,81 @@ class ReplaySource(_PlayedSource):
         super().__init__(camera_id, frames, title=f'replay:{file.name}', loop=False, speed=speed)
 
 
+class VideoReplaySource(ReplaySource):
+    """`replay:<tracks.jsonl>@<video>`: recorded tracks played over the real video they describe.
+
+    Frame k of the video is shown for track time ts = k / video fps (relative to the first track
+    frame), so the engine, evidence and stream all see real footage without running a detector.
+    """
+
+    def __init__(self, camera_id: str, path: str, video: str, speed: float | None = None):
+        super().__init__(camera_id, path, speed=speed)
+        self._video_path = Path(video)
+        capture = cv2.VideoCapture(str(self._video_path))
+        if not capture.isOpened():
+            raise SourceError('replay video not found or unreadable')
+        self._video_fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
+        capture.release()
+        self._capture = None
+        self._index = -1
+        self._image: np.ndarray | None = None
+        self._images: deque[tuple[float, bytes]] = deque()
+
+    def _frame_at(self, ts: float) -> np.ndarray:
+        """Read forward to the frame for `ts`; restarts the reader if time goes backwards."""
+        target = max(0, round((ts - self._frames[0].ts) * self._video_fps))
+        if self._capture is None or target < self._index:
+            if self._capture is not None:
+                self._capture.release()
+            self._capture = cv2.VideoCapture(str(self._video_path))
+            self._index, self._image = -1, None
+        while self._index < target:
+            ok, image = self._capture.read()
+            if not ok:
+                break  # past the end of the video: keep showing the last frame
+            self._index, self._image = self._index + 1, image
+        if self._image is None:
+            raise SourceError('replay video has no frames')
+        return self._image
+
+    def render(self, tf: TrackFrame) -> np.ndarray:
+        image = self._frame_at(tf.ts).copy()
+        ok, jpeg = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if ok:
+            with self._lock:
+                self._images.append((tf.ts, jpeg.tobytes()))
+                while self._images and tf.ts - self._images[0][0] > self.BUFFER_SECONDS:
+                    self._images.popleft()
+        return image
+
+    def first_frame(self) -> np.ndarray:
+        capture = cv2.VideoCapture(str(self._video_path))
+        try:
+            ok, image = capture.read()
+        finally:
+            capture.release()
+        if not ok:
+            raise SourceError('replay video has no frames')
+        return image
+
+    def recent_frames(self, seconds: float) -> list[tuple[float, np.ndarray]]:
+        with self._lock:
+            if not self._images:
+                return []
+            newest = self._images[-1][0]
+            chosen = [(ts, data) for ts, data in self._images if newest - ts <= seconds]
+        return [(ts, cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)) for ts, data in chosen]
+
+    def frames(self) -> Iterator[tuple[np.ndarray, TrackFrame]]:
+        # Release the reader in the worker thread that uses it, never from stop().
+        try:
+            yield from super().frames()
+        finally:
+            if self._capture is not None:
+                self._capture.release()
+                self._capture = None
+
+
 # Vision sources --------------------------------------------------------------------
 
 class VisionSource:
@@ -307,7 +383,10 @@ def build_source(camera: Camera, multi_camera: bool = False):
     if kind == 'synthetic':
         return SyntheticSource(camera.id, value.strip())
     if kind == 'replay':
-        return ReplaySource(camera.id, value.strip())
+        tracks, _, video = value.strip().partition('@')
+        if video:
+            return VideoReplaySource(camera.id, tracks, video)
+        return ReplaySource(camera.id, tracks)
     raise SourceError(UNSUPPORTED)
 
 
