@@ -32,8 +32,8 @@ export default function Marker({ bbox, title, detail, small }: Props) {
   const top = Math.max(0, y1 - pad * 1.6)
   const width = Math.min(1, x2 + pad) - left
   const height = Math.min(1, y2 + pad * 1.6) - top
-  // keep the note inside the frame: put it on whichever side has more room
-  const noteOnLeft = x2 > (small ? 0.5 : 0.7)
+  // keep the note inside the frame: put it on whichever side of the circle has more room
+  const noteOnLeft = left > 1 - (left + width)
 
   const bx = left * size.w
   const by = top * size.h

@@ -3,7 +3,7 @@ export default function Wordmark({ size = 22, onClick }: { size?: number; onClic
     <button
       type="button"
       onClick={onClick}
-      className="font-sans font-semibold tracking-[-0.03em]"
+      className="font-display font-semibold tracking-[-0.03em]"
       style={{ fontSize: size, lineHeight: 1 }}
     >
       <span className="text-text">policy</span>

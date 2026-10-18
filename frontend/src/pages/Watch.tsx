@@ -6,7 +6,7 @@ import { api } from '../api'
 import AlertCard from '../components/AlertCard'
 import Feed from '../components/Feed'
 import Wordmark from '../components/Wordmark'
-import { captureFrame } from '../localCamera'
+import { captureFrame, captureSnippet, isMockBackend, snippetAfterFrames } from '../localCamera'
 import { loadPolicy } from '../rules'
 import type { Alert, Camera, Decision } from '../types'
 import { useLive } from '../useLive'
@@ -23,6 +23,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
   const [toast, setToast] = useState<Alert | null>(null)
   const [fresh, setFresh] = useState<Set<string>>(new Set()) // arrived in the last few seconds
   const [resolving, setResolving] = useState<Record<string, Decision>>({})
+  const [snippets, setSnippets] = useState<Record<string, { frames: string[]; detectAt: number }>>({})
   const [, tick] = useState(0)
 
   useEffect(() => {
@@ -30,7 +31,10 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
       setCameras(c)
       setSelected((s) => s ?? c.find((x) => x.id === 'cam_exit')?.id ?? c[0]?.id ?? null)
     })
-    api.getAlerts().then(setAlerts).catch(() => {})
+    // the mock's saved evidence is placeholder art, so history from the mock shows text only
+    Promise.all([api.getAlerts(), isMockBackend()])
+      .then(([list, mock]) => setAlerts(mock ? list.map((a) => ({ ...a, evidence_image: null })) : list))
+      .catch(() => {})
     const t = window.setInterval(() => tick((n) => n + 1), 15000) // refresh "2 min ago"
     return () => window.clearInterval(t)
   }, [])
@@ -41,6 +45,11 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
       // testing with this browser's webcam: keep the real frame the alert fired on as evidence
       const frame = captureFrame(alert.camera_id)
       if (frame) alert = { ...alert, evidence_image: frame }
+      const id = alert.id
+      captureSnippet(alert.camera_id).then((frames) => {
+        // the snippet runs a moment past the alert, so the detection sits that many frames from the end
+        if (frames.length > 1) setSnippets((s) => ({ ...s, [id]: { frames, detectAt: Math.max(0, frames.length - snippetAfterFrames) } }))
+      })
       setToast(alert)
       setFresh((f) => new Set(f).add(alert.id))
       window.setTimeout(() => setFresh((f) => {
@@ -119,7 +128,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
       <header className="flex shrink-0 items-center justify-between px-8 py-5">
         <Wordmark size={22} onClick={() => go('landing')} />
         <div className="flex items-center gap-7 text-[17px]">
-          <span className="label">
+          <span className="text-[15px] text-muted">
             {live.connected ? `${onlineCount} of ${cameras.length} cameras live` : 'Reconnecting…'}
           </span>
           <button className="text-muted hover:text-text" onClick={() => go('setup')}>edit policy</button>
@@ -159,15 +168,15 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
 
         <aside className="flex w-[340px] shrink-0 flex-col gap-4">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-[36px] font-semibold leading-none tracking-[-0.04em]">Noticed</h2>
-            <span className="label">{openCount ? `${openCount} need you` : 'all clear'}</span>
+            <h2 className="font-display text-[32px] font-semibold leading-none tracking-[-0.04em]">Noticed</h2>
+            <span className="text-[14px] text-muted">{openCount ? `${openCount} need you` : 'All clear'}</span>
           </div>
           <div className="flex items-center gap-2">
             {(['open', 'reviewed'] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`rounded-full px-3.5 py-1.5 text-[14px] ${tab === t ? 'bg-raised text-text' : 'text-muted hover:text-text'}`}
+                className={`rounded-full border px-3.5 py-1.5 text-[14px] transition ${tab === t ? 'border-line text-text' : 'border-transparent text-muted hover:text-text'}`}
               >
                 {t}
               </button>
@@ -175,7 +184,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
             <select
               value={cameraFilter}
               onChange={(e) => setCameraFilter(e.target.value)}
-              className="ml-auto rounded-full bg-raised px-3 py-1.5 text-[14px] text-text outline-none"
+              className="ml-auto rounded-full border border-line bg-transparent px-3 py-1.5 text-[14px] text-text outline-none"
               aria-label="Filter by camera"
             >
               <option value="all">all cameras</option>
@@ -184,7 +193,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
               ))}
             </select>
           </div>
-          <div className="-m-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+          <div className="-m-3 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-3">
             {visible.length === 0 && (
               <p className="pt-2 text-[15px] text-muted">{tab === 'open' ? 'Nothing needs you right now.' : 'No decisions yet.'}</p>
             )}
@@ -196,6 +205,7 @@ export default function Watch({ go }: { go: (p: Page) => void }) {
                 isNew={fresh.has(a.id)}
                 shortcuts={a.id === top?.id}
                 resolving={resolving[a.id] ?? null}
+                snippet={snippets[a.id]}
                 onDecide={(d) => decide(a.id, d)}
               />
             ))}

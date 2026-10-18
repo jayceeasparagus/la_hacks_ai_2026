@@ -1,4 +1,4 @@
-// Setup: connect cameras and draw their zones, write the policy, review what it compiled to,
+// Setup: write the policy, check what it compiled to, connect cameras and draw their zones,
 // then start watching. Nothing runs until the operator confirms the rules.
 import { useEffect, useState } from 'react'
 import type { Page } from '../App'
@@ -11,6 +11,7 @@ import type { Camera, CompileResult, Rule, Severity, Zone } from '../types'
 import { Arrow } from './Landing'
 
 const MAX_CAMERAS = 3
+const SEVERITIES: Severity[] = ['info', 'review', 'urgent']
 
 export default function Setup({ go }: { go: (p: Page) => void }) {
   const saved = loadPolicy()
@@ -86,8 +87,13 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
     }
   }
 
-  const zoneName = (id: string) => zones.find((z) => z.id === id)?.name ?? id.replace(/_/g, ' ')
-  const zoneCamera = (id: string) => cameras.find((c) => c.id === zones.find((z) => z.id === id)?.camera_id)
+  const where = (rule: Rule) => {
+    const zone = zones.find((z) => z.id === rule.zone)
+    const cam = cameras.find((c) => c.id === zone?.camera_id)
+    const zoneName = zone?.name ?? rule.zone.replace(/_/g, ' ')
+    return cam && cam.name.toLowerCase() !== zoneName.toLowerCase() ? `${zoneName} on ${cam.name}` : zoneName
+  }
+  const enabledCount = rules.filter((r) => r.enabled).length
 
   return (
     <div className="min-h-full bg-ink">
@@ -102,145 +108,152 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
         </nav>
       </header>
 
-      <main className="mx-auto flex max-w-[1320px] flex-col gap-12 px-16 pb-20">
-        <h1 className="rise text-[64px] font-semibold leading-none tracking-[-0.045em]">
-          What matters <span className="text-accent">here?</span>
-        </h1>
+      <main className="mx-auto grid max-w-[1320px] grid-cols-[minmax(0,1fr)_360px] gap-24 px-16 pb-24 pt-6">
+        {/* the policy, written like a document */}
+        <section className="rise flex flex-col">
+          <h1 className="font-display text-[56px] font-semibold leading-[1.05] tracking-[-0.045em]">
+            What matters <span className="text-accent">here?</span>
+          </h1>
 
-        <div className="grid grid-cols-[440px_minmax(0,1fr)] gap-14">
-          {/* cameras */}
-          <section className="rise flex flex-col gap-5" style={{ '--d': '100ms' } as React.CSSProperties}>
-            <span className="label">Your cameras</span>
-            <div className="grid grid-cols-2 gap-4">
-              {cameras.map((cam, i) => {
-                const camZones = zones.filter((z) => z.camera_id === cam.id)
-                return (
-                  <div key={cam.id} className="flex flex-col gap-2">
-                    <button
-                      onClick={() => setEditing(cam)}
-                      className="group relative aspect-video overflow-hidden rounded-md bg-panel text-left"
-                      aria-label={`Draw zones on ${cam.name}`}
-                    >
-                      <LiveVideo camera={cam} />
-                      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
-                        {camZones.map((z) => (
-                          <polygon
-                            key={z.id}
-                            points={z.polygon.map((p) => p.join(',')).join(' ')}
-                            fill="rgba(143,178,255,0.08)"
-                            stroke="#F1EEE6"
-                            strokeWidth={1.2}
-                            vectorEffect="non-scaling-stroke"
-                          />
-                        ))}
-                      </svg>
-                      <span className="label absolute left-2 top-2 text-[10px] text-text">CAM {String(i + 1).padStart(2, '0')}</span>
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-[14px] text-text opacity-0 transition group-hover:opacity-100">
-                        Draw zones
-                      </span>
-                    </button>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 flex-col">
-                        <span className="truncate text-[15px] text-text">{cam.name}</span>
-                        <span className="truncate font-mono text-[11px] text-dim">
-                          {camZones.length} zone{camZones.length === 1 ? '' : 's'} · {cam.source}
-                        </span>
-                      </div>
-                      <button
-                        className="text-[13px] text-dim hover:text-text"
-                        onClick={() => saveCameras(cameras.filter((c) => c.id !== cam.id))}
-                        aria-label={`Remove ${cam.name}`}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {adding ? (
-              <AddCamera
-                existing={cameras}
-                onAdd={(c) => {
-                  saveCameras([...cameras, c])
-                  setAdding(false)
-                }}
-                onCancel={() => setAdding(false)}
-              />
-            ) : (
-              cameras.length < MAX_CAMERAS && (
-                <button className="self-start text-[15px] text-muted hover:text-text" onClick={() => setAdding(true)}>
-                  + connect another camera
-                </button>
-              )
-            )}
-          </section>
-
-          {/* policy */}
-          <section className="rise flex flex-col gap-8" style={{ '--d': '180ms' } as React.CSSProperties}>
-            <div className="relative flex flex-col overflow-hidden rounded-xl border border-line bg-panel">
-              {compiling && <div className="scan-line" />}
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) compile()
-                }}
-                rows={5}
-                className="resize-none bg-transparent px-8 pt-7 text-[24px] leading-[36px] text-text outline-none placeholder:text-dim"
-                placeholder="Describe the rules for this space, the way you'd brief a new staff member."
-                aria-label="Policy"
-              />
-              <div className="flex items-center justify-end gap-4 px-6 pb-5 pt-2">
-                <button className="btn-primary py-2.5 text-[15px]" onClick={compile} disabled={compiling || !text.trim()}>
-                  {compiling ? 'reading…' : result ? 'read again' : 'read it'}
-                  <span className="font-mono text-[12px] text-black/50">⌘↵</span>
-                </button>
-              </div>
-            </div>
-
-            {result && (
-              <div className="flex flex-col gap-4">
-                <span className="label text-accent">It will watch for</span>
-                <div className="grid grid-cols-3 gap-4">
-                  {rules.map((rule, i) => (
-                    <RuleCard
-                      key={`${compileCount}-${rule.id}`}
-                      delay={i * 110}
-                      rule={rule}
-                      zone={zoneName(rule.zone)}
-                      camera={zoneCamera(rule.zone)?.name}
-                      onChange={(patch) => updateRule(rule.id, patch)}
-                    />
-                  ))}
-                  {result.unsupported.map((u, i) => (
-                    <div
-                      key={`${compileCount}-${u}`}
-                      className="rise flex flex-col gap-2 rounded-lg border border-dashed border-line p-4"
-                      style={{ '--d': `${(rules.length + i) * 110}ms` } as React.CSSProperties}
-                    >
-                      <span className="label">Can't watch for this</span>
-                      <span className="text-[14px] leading-5 text-muted">{u}</span>
-                    </div>
-                  ))}
-                </div>
-                {result.warnings.map((w) => (
-                  <p key={w} className="text-[14px] text-muted">
-                    <span className="label mr-2 text-text">Note</span>
-                    {w}
-                  </p>
-                ))}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between gap-6">
-              <span className="text-[14px] text-muted">{error}</span>
-              <button className="btn-primary" onClick={start} disabled={starting || rules.filter((r) => r.enabled).length === 0}>
-                {starting ? 'starting…' : 'start watching'} <Arrow />
+          <div className="mt-10">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) compile()
+              }}
+              rows={5}
+              className="w-full resize-none bg-transparent text-[26px] leading-[40px] text-text caret-accent outline-none placeholder:text-dim"
+              placeholder="Describe the rules for this space."
+              aria-label="Policy"
+            />
+            <div className="relative h-px w-full overflow-hidden bg-line">{compiling && <div className="reading-bar" />}</div>
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-[14px] text-muted">{compiling ? 'Reading your policy…' : '⌘ Enter to read it'}</span>
+              <button className="btn-primary py-2.5 text-[15px]" onClick={compile} disabled={compiling || !text.trim()}>
+                {result ? 'read again' : 'read it'}
               </button>
             </div>
-          </section>
-        </div>
+          </div>
+
+          {result && (
+            <div className="mt-16 flex flex-col">
+              <h2 className="mb-2 font-display text-[22px] font-medium tracking-[-0.02em]">
+                It will watch for {rules.length === 1 ? 'one thing' : `${rules.length} things`}
+              </h2>
+              <ul className="flex flex-col">
+                {rules.map((rule, i) => (
+                  <RuleRow
+                    key={`${compileCount}-${rule.id}`}
+                    index={i}
+                    rule={rule}
+                    where={where(rule)}
+                    onChange={(patch) => updateRule(rule.id, patch)}
+                  />
+                ))}
+                {result.unsupported.map((u, i) => (
+                  <li
+                    key={`${compileCount}-${u}`}
+                    className="rise flex gap-5 border-b border-line py-5"
+                    style={{ '--d': `${(rules.length + i) * 110}ms` } as React.CSSProperties}
+                  >
+                    <span className="w-6 shrink-0 pt-0.5 font-mono text-[13px] text-dim">—</span>
+                    <span className="flex flex-col gap-1">
+                      <span className="text-[17px] text-muted">Can't watch for this</span>
+                      <span className="text-[14px] leading-5 text-dim">{u}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {result.warnings.map((w) => (
+                <p key={w} className="mt-4 text-[14px] text-muted">
+                  {w}
+                </p>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-12 flex items-center justify-between gap-6">
+            <span className="text-[14px] text-muted">{error}</span>
+            <button className="btn-primary group" onClick={start} disabled={starting || enabledCount === 0}>
+              {starting ? 'starting…' : 'start watching'}
+              <span className="transition-transform duration-300 group-hover:translate-x-1">
+                <Arrow />
+              </span>
+            </button>
+          </div>
+        </section>
+
+        {/* cameras, beside the policy */}
+        <aside className="rise flex flex-col gap-6 self-start pt-3" style={{ '--d': '120ms' } as React.CSSProperties}>
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-display text-[22px] font-medium tracking-[-0.02em]">Cameras</h2>
+            <span className="text-[14px] text-muted">
+              {cameras.length} of {MAX_CAMERAS}
+            </span>
+          </div>
+          {cameras.map((cam, i) => {
+            const camZones = zones.filter((z) => z.camera_id === cam.id)
+            return (
+              <div key={cam.id} className="flex flex-col gap-2.5">
+                <button
+                  onClick={() => setEditing(cam)}
+                  className="group relative aspect-video overflow-hidden rounded-[4px] bg-panel text-left"
+                  aria-label={`Draw zones on ${cam.name}`}
+                >
+                  <LiveVideo camera={cam} />
+                  <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
+                    {camZones.map((z) => (
+                      <polygon
+                        key={z.id}
+                        points={z.polygon.map((p) => p.join(',')).join(' ')}
+                        fill="rgba(143,178,255,0.08)"
+                        stroke="#F1EEE6"
+                        strokeWidth={1.2}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    ))}
+                  </svg>
+                  <span className="absolute left-2.5 top-2 font-mono text-[10px] tracking-label text-text">
+                    CAM {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-[15px] text-text opacity-0 transition duration-300 group-hover:opacity-100">
+                    Draw zones
+                  </span>
+                </button>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="truncate text-[16px] text-text">{cam.name}</span>
+                  <button
+                    className="shrink-0 text-[13px] text-dim transition hover:text-text"
+                    onClick={() => saveCameras(cameras.filter((c) => c.id !== cam.id))}
+                  >
+                    remove
+                  </button>
+                </div>
+                <span className="-mt-2 truncate text-[13px] text-muted">
+                  {camZones.length ? camZones.map((z) => z.name).join(', ') : 'No zones yet'} ·{' '}
+                  <span className="font-mono text-[12px]">{cam.source}</span>
+                </span>
+              </div>
+            )
+          })}
+          {adding ? (
+            <AddCamera
+              existing={cameras}
+              onAdd={(c) => {
+                saveCameras([...cameras, c])
+                setAdding(false)
+              }}
+              onCancel={() => setAdding(false)}
+            />
+          ) : (
+            cameras.length < MAX_CAMERAS && (
+              <button className="self-start text-[15px] text-muted transition hover:text-text" onClick={() => setAdding(true)}>
+                + connect another camera
+              </button>
+            )
+          )}
+        </aside>
       </main>
 
       {editing && (
@@ -255,64 +268,78 @@ export default function Setup({ go }: { go: (p: Page) => void }) {
   )
 }
 
-function RuleCard({
-  rule,
-  zone,
-  camera,
-  delay,
-  onChange,
-}: {
-  rule: Rule
-  zone: string
-  camera?: string
-  delay: number
-  onChange: (p: Partial<Rule>) => void
-}) {
-  const urgent = rule.severity === 'urgent'
-  const base = urgent ? 'bg-accent text-accent-ink' : 'bg-panel text-text border border-line'
-  const sub = urgent ? 'text-accent-ink/70' : 'text-muted'
+// One compiled rule. Every rule gets the same row and the same controls.
+function RuleRow({ index, rule, where, onChange }: { index: number; rule: Rule; where: string; onChange: (p: Partial<Rule>) => void }) {
+  const timing = rule.type === 'persistent_object' ? 'Alert after' : 'Check after'
   return (
-    <div
-      className={`rise flex flex-col gap-3 rounded-lg p-4 transition-[filter] duration-300 ${base} ${rule.enabled ? '' : 'opacity-60 grayscale'}`}
-      style={{ '--d': `${delay}ms` } as React.CSSProperties}
+    <li
+      className={`rise flex items-start gap-5 border-b border-line py-5 transition-opacity duration-300 ${rule.enabled ? '' : 'opacity-40'}`}
+      style={{ '--d': `${index * 110}ms` } as React.CSSProperties}
     >
-      <span className={`font-mono text-[11px] font-medium uppercase tracking-label ${sub}`}>
-        {camera ?? zone} · {rule.severity}
-      </span>
-      <div className="flex flex-col gap-1">
-        <span className="text-[16px] font-semibold leading-5">{rule.name}</span>
-        <span className={`text-[13px] leading-[18px] ${sub}`}>{ruleCondition(rule)}</span>
+      <span className="w-6 shrink-0 pt-1 font-mono text-[13px] text-dim">{String(index + 1).padStart(2, '0')}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-[17px] text-text">{rule.name}</span>
+        <span className="text-[14px] leading-5 text-muted">
+          {ruleCondition(rule)} · {where}
+        </span>
+        <div className="mt-3 flex flex-wrap items-center gap-x-8 gap-y-3 text-[14px]">
+          <div className="flex items-center gap-2 text-muted">
+            {timing}
+            <span className="flex items-center rounded-full border border-line">
+              <button
+                className="px-2.5 py-1 text-muted transition hover:text-text"
+                onClick={() => onChange({ duration_seconds: Math.max(0.5, rule.duration_seconds - 0.5) })}
+                aria-label="Fewer seconds"
+              >
+                −
+              </button>
+              <span className="w-10 text-center font-mono text-[13px] text-text">{rule.duration_seconds} s</span>
+              <button
+                className="px-2.5 py-1 text-muted transition hover:text-text"
+                onClick={() => onChange({ duration_seconds: rule.duration_seconds + 0.5 })}
+                aria-label="More seconds"
+              >
+                +
+              </button>
+            </span>
+          </div>
+          <div className="flex items-center gap-1" role="radiogroup" aria-label="Severity">
+            {SEVERITIES.map((s) => (
+              <button
+                key={s}
+                role="radio"
+                aria-checked={rule.severity === s}
+                onClick={() => onChange({ severity: s })}
+                className={`rounded-full border px-3 py-1 transition ${
+                  rule.severity === s
+                    ? `border-line ${s === 'urgent' ? 'text-accent' : 'text-text'}`
+                    : 'border-transparent text-dim hover:text-muted'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className={`mt-auto flex items-center gap-2 text-[13px] ${sub}`}>
-        {rule.type === 'persistent_object' && (
-          <label className="flex items-center gap-1">
-            <input
-              type="number"
-              min={1}
-              step={0.5}
-              value={rule.duration_seconds}
-              onChange={(e) => onChange({ duration_seconds: Number(e.target.value) || 1 })}
-              className="w-12 rounded bg-black/15 px-1.5 py-1 text-center font-mono outline-none"
-              aria-label="Seconds before alerting"
-            />
-            s
-          </label>
-        )}
-        <select
-          value={rule.severity}
-          onChange={(e) => onChange({ severity: e.target.value as Severity })}
-          className="rounded bg-black/15 px-1.5 py-1 outline-none"
-          aria-label="Severity"
-        >
-          <option value="info">info</option>
-          <option value="review">review</option>
-          <option value="urgent">urgent</option>
-        </select>
-        <button className="ml-auto underline-offset-2 hover:underline" onClick={() => onChange({ enabled: !rule.enabled })}>
-          {rule.enabled ? 'on' : 'off'}
-        </button>
-      </div>
-    </div>
+      <Toggle on={rule.enabled} onChange={(on) => onChange({ enabled: on })} label={rule.name} />
+    </li>
+  )
+}
+
+function Toggle({ on, onChange, label }: { on: boolean; onChange: (on: boolean) => void; label: string }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={on}
+      aria-label={`${on ? 'Turn off' : 'Turn on'} ${label}`}
+      onClick={() => onChange(!on)}
+      className={`relative mt-1 h-6 w-10 shrink-0 rounded-full border transition ${on ? 'border-transparent bg-[#F1EEE6]' : 'border-line bg-transparent'}`}
+    >
+      <span
+        className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition-all duration-300 ${on ? 'left-[20px] bg-black' : 'left-[3px] bg-dim'}`}
+      />
+    </button>
   )
 }
 
@@ -326,13 +353,19 @@ function AddCamera({ existing, onAdd, onCancel }: { existing: Camera[]; onAdd: (
     while (existing.some((c) => c.id === id)) id += '_2'
     onAdd({ id, name: name.trim(), source: source.trim() })
   }
+  const field = 'border-b border-line bg-transparent py-2 text-[15px] text-text outline-none placeholder:text-dim focus:border-muted'
   return (
-    <form onSubmit={submit} className="flex flex-col gap-2">
-      <input className="field" placeholder="Name, e.g. Side door" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-      <input className="field font-mono text-[13px]" placeholder="webcam:1 or http://phone-ip:8080/video" value={source} onChange={(e) => setSource(e.target.value)} />
-      <div className="flex gap-2">
-        <button type="button" className="btn-quiet" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="btn-quiet bg-[#F1EEE6] text-black hover:bg-white">Connect</button>
+    <form onSubmit={submit} className="rise flex flex-col gap-3">
+      <input className={field} placeholder="Name, e.g. Side door" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      <input
+        className={`${field} font-mono text-[13px]`}
+        placeholder="webcam:1 or http://phone-ip:8080/video"
+        value={source}
+        onChange={(e) => setSource(e.target.value)}
+      />
+      <div className="flex gap-5 pt-1 text-[15px]">
+        <button type="submit" className="text-text">connect</button>
+        <button type="button" className="text-muted hover:text-text" onClick={onCancel}>cancel</button>
       </div>
     </form>
   )

@@ -78,7 +78,7 @@ export default function Feed({ camera, index, status, ruleStates = [], rules = [
 
       {offline && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="label text-[13px] text-text">No signal from {camera.name}</span>
+          <span className="text-[15px] text-text">No signal from {camera.name}</span>
         </div>
       )}
 

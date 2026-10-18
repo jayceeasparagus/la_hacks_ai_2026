@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  scroll-behavior: smooth;
+}
+
 html,
 body,
 #root {
@@ -126,6 +130,41 @@ body {
   border-bottom: 1px solid rgba(143, 178, 255, 0.5);
   animation: scan 1.1s ease-in-out infinite alternate;
   pointer-events: none;
+}
+
+/* monitors drifting slightly, each on its own slow rhythm (--float-d offsets the phase) */
+@keyframes float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -7px; }
+}
+.float {
+  animation: float var(--float-t, 8s) ease-in-out var(--float-d, 0s) infinite;
+}
+
+/* typing caret */
+@keyframes blink {
+  50% { opacity: 0; }
+}
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  background: #8fb2ff;
+  animation: blink 1s steps(1) infinite;
+}
+
+/* thin indeterminate bar while the policy is being read */
+@keyframes reading {
+  from { translate: -100% 0; }
+  to { translate: 250% 0; }
+}
+.reading-bar {
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #8fb2ff, transparent);
+  animation: reading 1.1s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

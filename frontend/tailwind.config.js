@@ -16,6 +16,7 @@ export default {
       },
       fontFamily: {
         sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'],
+        display: ['Poppins', '"Instrument Sans"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       letterSpacing: {

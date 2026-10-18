@@ -98,12 +98,12 @@ export default function ZoneEditor({ camera, zones: initial, onSave, onClose }: 
   const pts = (poly: Pt[]) => poly.map(([x, y]) => `${x},${y}`).join(' ')
 
   return (
-    <div className="toast-in fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-10 backdrop-blur-sm" onClick={onClose}>
+    <div className="toast-in fixed inset-0 z-50 flex items-center justify-center bg-black p-10" onClick={onClose}>
       <div className="flex w-full max-w-[1280px] gap-8" onClick={(e) => e.stopPropagation()}>
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-baseline justify-between">
-            <span className="label text-text">Zones · {camera.name}</span>
-            <span className="label">Drag for a rectangle · click points, then the first point to close · Esc to cancel</span>
+            <span className="font-display text-[22px] font-medium tracking-[-0.02em] text-text">Zones on {camera.name}</span>
+            <span className="text-[14px] text-muted">Drag for a rectangle, or click points and close on the first one. Esc cancels.</span>
           </div>
           <div className="relative aspect-video overflow-hidden rounded-md bg-panel">
             <LiveVideo camera={camera} />
@@ -154,7 +154,7 @@ export default function ZoneEditor({ camera, zones: initial, onSave, onClose }: 
             {zones.map((z) => (
               <span
                 key={z.id}
-                className="label pointer-events-none absolute text-text"
+                className="pointer-events-none absolute text-[13px] font-medium text-text"
                 style={{ left: `${z.polygon[0][0] * 100}%`, top: `calc(${z.polygon[0][1] * 100}% - 18px)` }}
               >
                 {z.name}

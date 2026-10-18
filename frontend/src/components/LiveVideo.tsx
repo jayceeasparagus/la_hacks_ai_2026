@@ -20,8 +20,7 @@ export default function LiveVideo({ camera, attempt = 0, dimmed, onError }: Prop
     const el = videoRef.current
     if (!el || !stream) return
     el.srcObject = stream
-    registerVideo(camera.id, el)
-    return () => registerVideo(camera.id, null)
+    return registerVideo(camera.id, el)
   }, [stream, camera.id])
 
   const cls = `h-full w-full object-cover transition-opacity duration-700 ${dimmed ? 'opacity-30' : 'opacity-100'}`

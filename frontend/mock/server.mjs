@@ -7,7 +7,7 @@ import express from 'express'
 import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
 
-const PORT = 8000
+const PORT = Number(process.env.BACKEND_PORT ?? 8000)
 const CYCLE_SECONDS = 40
 
 let cameras = [
