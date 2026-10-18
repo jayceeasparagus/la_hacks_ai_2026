@@ -7,10 +7,13 @@ dropout,tracks:generated/dropout.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
 id_switch,tracks:generated/id_switch.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
 reentry,tracks:generated/reentry.tracks.jsonl,synthetic,blocked_exit,2,5.0,16.5
 chair,tracks:generated/chair.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
-lobby_exit_walkway,tracks:../clips/caviar/LeftBag.tracks.jsonl,../demo/scenes/lobby.json,blocked_exit,1,42.8,43.8
-lobby_seating_area,tracks:../clips/caviar/LeftBag_AtChair.tracks.jsonl,../demo/scenes/lobby.json,unattended_bag,1,28.2,29.2
-lobby_reception_desk,tracks:../clips/caviar/LeftBag_PickedUp.tracks.jsonl,../demo/scenes/lobby.json,unattended_bag_2,1,30.1,31.1
-# Lobby rows: CAVIAR real footage with hand-labelled tracks (python -B ../eval/caviar_tracks.py, see demo/README.md).
+lobby_exit_walkway,tracks:../clips/caviar/LeftBag.gt.tracks.jsonl,../demo/scenes/lobby.json,blocked_exit,1,42.8,43.8
+lobby_seating_area,tracks:../clips/caviar/LeftBag_AtChair.gt.tracks.jsonl,../demo/scenes/lobby.json,unattended_bag,1,28.2,29.2
+lobby_reception_desk,tracks:../clips/caviar/LeftBag_PickedUp.gt.tracks.jsonl,../demo/scenes/lobby.json,unattended_bag_2,1,30.1,31.1
+lobby_exit_walkway_detector,tracks:../clips/caviar/LeftBag.detector.tracks.jsonl,../demo/scenes/lobby.json,blocked_exit,1,42.8,43.8
+# Lobby rows: CAVIAR real footage with hand-labelled tracks; the _detector row uses Person 1's YOLO-World output
+# (python -m vision.dump ../clips/caviar/LeftBag.mpg --camera-id cam_lobby_east, then rename to .detector.tracks.jsonl)
+# (python -B ../eval/caviar_tracks.py, see demo/README.md).
 # Real clips go below once recorded; config points at a JSON with the zones drawn for that clip.
 # exit_bag_real,clip:../clips/exit_bag.mp4,configs/exit.json,blocked_exit,1,8.0,9.0
 # opaque_bag_entrance,clip:../clips/opaque_bag.mp4,configs/entrance.json,clear_bag,1,2.0,6.0

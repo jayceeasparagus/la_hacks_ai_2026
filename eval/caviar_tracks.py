@@ -1,7 +1,7 @@
 """Convert CAVIAR ground-truth XML into approved TrackFrame JSONL for replay over the real video.
 
     python -B ../eval/caviar_tracks.py ../clips/caviar/lb1gt.xml --video ../clips/caviar/LeftBag.mpg \
-        --camera-id cam_lobby_east --out ../clips/caviar/LeftBag.tracks.jsonl
+        --camera-id cam_lobby_east --out ../clips/caviar/LeftBag.gt.tracks.jsonl
 
 CAVIAR (EC Funded CAVIAR project / IST 2001 37540, CC BY-SA) labels every object per frame with a
 centre/size box and a role. The object whose role is "leaving object" is the left bag (class

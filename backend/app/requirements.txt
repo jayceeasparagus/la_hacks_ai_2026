@@ -10,5 +10,6 @@ httpx>=0.27         # fastapi.testclient
 pytest>=8           # Person 2's tests (policy/tests, verify/tests)
 
 # Live cameras (webcam:, url:, clip: sources) also need Person 1's backend/vision/ and its
-# detector stack: ultralytics, torch and git+https://github.com/ultralytics/CLIP.git.
+# detector stack: ultralytics, torch, lap (ByteTrack matching; vision/detector.py disables
+# ultralytics' runtime auto-install) and git+https://github.com/ultralytics/CLIP.git.
 # Without them the server still runs with synthetic: and replay: cameras.

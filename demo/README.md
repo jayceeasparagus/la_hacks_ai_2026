@@ -22,14 +22,21 @@ and `clips/pexels/` with the file names listed there. Then build the lobby track
 hand-labelled ground truth, from `backend/`:
 
 ```sh
-python -B ../eval/caviar_tracks.py ../clips/caviar/lb1gt.xml  --video ../clips/caviar/LeftBag.mpg          --camera-id cam_lobby_east    --out ../clips/caviar/LeftBag.tracks.jsonl
-python -B ../eval/caviar_tracks.py ../clips/caviar/lb2gt.xml  --video ../clips/caviar/LeftBag_AtChair.mpg  --camera-id cam_lobby_seating --out ../clips/caviar/LeftBag_AtChair.tracks.jsonl
-python -B ../eval/caviar_tracks.py ../clips/caviar/lbpugt.xml --video ../clips/caviar/LeftBag_PickedUp.mpg --camera-id cam_lobby_desk    --out ../clips/caviar/LeftBag_PickedUp.tracks.jsonl
+python -B ../eval/caviar_tracks.py ../clips/caviar/lb1gt.xml  --video ../clips/caviar/LeftBag.mpg          --camera-id cam_lobby_east    --out ../clips/caviar/LeftBag.gt.tracks.jsonl
+python -B ../eval/caviar_tracks.py ../clips/caviar/lb2gt.xml  --video ../clips/caviar/LeftBag_AtChair.mpg  --camera-id cam_lobby_seating --out ../clips/caviar/LeftBag_AtChair.gt.tracks.jsonl
+python -B ../eval/caviar_tracks.py ../clips/caviar/lbpugt.xml --video ../clips/caviar/LeftBag_PickedUp.mpg --camera-id cam_lobby_desk    --out ../clips/caviar/LeftBag_PickedUp.gt.tracks.jsonl
 ```
 
 These tracks are ground truth, not detector output. They show how the rules, timers, evidence
-and review flow behave on real footage. Detector accuracy on the same clips comes once Person 1's
-pipeline runs on them.
+and review flow behave on real footage. They're named `.gt.tracks.jsonl` because Person 1's
+`python -m vision.dump <clip>` writes `<clip>.tracks.jsonl` next to the clip; a shared name
+would overwrite the ground truth.
+
+**Detector check (2026-10-17, CPU, 6.1 fps):** Person 1's YOLO-World tracked the 9 people in
+`LeftBag.mpg` with no ID switches, but **did not detect the left bag**. It's about 16x21 px in this
+384x288 overhead fisheye footage. So the lobby scene uses ground truth on purpose, and the
+`lobby_exit_walkway_detector` eval row records that miss. For a live demo, film the bag at a
+normal height and distance.
 
 ## Run a scene
 

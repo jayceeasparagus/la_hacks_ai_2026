@@ -3,9 +3,9 @@
   "description": "Three ceiling cameras in a lobby. A bag is left on the exit walkway, by the seating area, and at the reception desk (later picked up). People walk through every zone and must never trigger a bag rule. Tracks are CAVIAR's hand-labelled ground truth replayed over the real video, so this scene runs with no detector and no Gemini key.",
   "policy": "Keep the exit walkway clear; alert if a bag or chair blocks it for more than 5 seconds. Alert if a bag is left in the seating area for more than 10 seconds. Alert if a bag is left at the reception desk for more than 10 seconds.",
   "cameras": [
-    {"id": "cam_lobby_east", "name": "Lobby east walkway", "source": "replay:../../clips/caviar/LeftBag.tracks.jsonl@../../clips/caviar/LeftBag.mpg"},
-    {"id": "cam_lobby_seating", "name": "Lobby seating", "source": "replay:../../clips/caviar/LeftBag_AtChair.tracks.jsonl@../../clips/caviar/LeftBag_AtChair.mpg"},
-    {"id": "cam_lobby_desk", "name": "Lobby reception", "source": "replay:../../clips/caviar/LeftBag_PickedUp.tracks.jsonl@../../clips/caviar/LeftBag_PickedUp.mpg"}
+    {"id": "cam_lobby_east", "name": "Lobby east walkway", "source": "replay:../../clips/caviar/LeftBag.gt.tracks.jsonl@../../clips/caviar/LeftBag.mpg"},
+    {"id": "cam_lobby_seating", "name": "Lobby seating", "source": "replay:../../clips/caviar/LeftBag_AtChair.gt.tracks.jsonl@../../clips/caviar/LeftBag_AtChair.mpg"},
+    {"id": "cam_lobby_desk", "name": "Lobby reception", "source": "replay:../../clips/caviar/LeftBag_PickedUp.gt.tracks.jsonl@../../clips/caviar/LeftBag_PickedUp.mpg"}
   ],
   "zones": [
     {"id": "exit_walkway", "camera_id": "cam_lobby_east", "name": "Exit walkway",
