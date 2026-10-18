@@ -16,7 +16,7 @@ export const REPO_URL = 'https://github.com/jayceeasparagus/la_hacks_ai_2026'
 interface WallFeed {
   id: string
   name: string
-  light: string // where the stand-in footage is brightest
+  video: string // stock clip under public/footage, shown in CCTV black and white
   bbox: [number, number, number, number]
   title: string
   detail: string
@@ -34,12 +34,12 @@ interface WallFeed {
 // all separated by clear gaps so nothing overlaps.
 // Heights are width * 0.72 in these units (16:9 in a 1.28 box).
 const WALL: WallFeed[] = [
-  { id: 'cam_exit', name: 'Emergency exit', light: '46% 44%', bbox: [0.3, 0.56, 0.44, 0.84], title: 'bag blocking the exit', detail: '5.4 s, flagged', left: 24, top: 28, width: 44, depth: 1, z: 30, corner: 'bl' },
-  { id: 'cam_stairs', name: 'Stairwell', light: '50% 36%', bbox: [0.2, 0.3, 0.34, 0.74], title: 'just passing', detail: 'ignored', left: 0, top: 20, width: 21, depth: 0.5, z: 20, corner: 'bl' },
-  { id: 'cam_lobby', name: 'Lobby', light: '38% 50%', bbox: [0.5, 0.36, 0.64, 0.66], title: 'clear bag', detail: 'all good', left: 70, top: 32, width: 30, depth: 0.65, z: 20, corner: 'bl' },
-  { id: 'cam_entrance', name: 'Main entrance', light: '52% 40%', bbox: [0.12, 0.48, 0.26, 0.76], title: 'bag, probably opaque', detail: 'sent for review', left: 4, top: 66, width: 34, depth: 0.75, z: 20, corner: 'bl' },
-  { id: 'cam_roof', name: 'Rooftop', light: '44% 40%', bbox: [0.3, 0.36, 0.44, 0.7], title: 'all quiet', detail: 'nothing to flag', left: 46, top: 3, width: 26, depth: 0.4, z: 20, corner: 'bl' },
-  { id: 'cam_dock', name: 'Loading dock', light: '60% 46%', bbox: [0.5, 0.42, 0.66, 0.74], title: 'chair by the door', detail: '2.1 s, watching', left: 50, top: 64, width: 38, depth: 0.55, z: 20, corner: 'bl' },
+  { id: 'cam_exit', name: 'Emergency exit', video: '/footage/exit.mp4', bbox: [0.3, 0.56, 0.44, 0.84], title: 'bag blocking the exit', detail: '5.4 s, flagged', left: 24, top: 28, width: 44, depth: 1, z: 30, corner: 'bl' },
+  { id: 'cam_stairs', name: 'Stairwell', video: '/footage/stairs.mp4', bbox: [0.2, 0.3, 0.34, 0.74], title: 'just passing', detail: 'ignored', left: 0, top: 20, width: 21, depth: 0.5, z: 20, corner: 'bl' },
+  { id: 'cam_lobby', name: 'Lobby', video: '/footage/lobby.mp4', bbox: [0.5, 0.36, 0.64, 0.66], title: 'clear bag', detail: 'all good', left: 70, top: 32, width: 30, depth: 0.65, z: 20, corner: 'bl' },
+  { id: 'cam_entrance', name: 'Main entrance', video: '/footage/entrance.mp4', bbox: [0.12, 0.48, 0.26, 0.76], title: 'bag, probably opaque', detail: 'sent for review', left: 4, top: 66, width: 34, depth: 0.75, z: 20, corner: 'bl' },
+  { id: 'cam_roof', name: 'Rooftop', video: '/footage/roof.mp4', bbox: [0.3, 0.36, 0.44, 0.7], title: 'all quiet', detail: 'nothing to flag', left: 46, top: 3, width: 26, depth: 0.4, z: 20, corner: 'bl' },
+  { id: 'cam_dock', name: 'Loading dock', video: '/footage/dock.mp4', bbox: [0.5, 0.42, 0.66, 0.74], title: 'chair by the door', detail: '2.1 s, watching', left: 50, top: 64, width: 38, depth: 0.55, z: 20, corner: 'bl' },
 ]
 
 // Monitors receding into the dark behind the cluster, toward a vanishing point. Purely
@@ -77,8 +77,8 @@ const VOID: FarFeed[] = (() => {
       const left = VANISH.x + Math.cos(angle) * dist * 1.15 - width / 2
       const top = VANISH.y + Math.sin(angle) * dist * 0.9 - height / 2
       // stay within the cluster's side of the page so nothing sits behind the headline
-      // only peek out from behind the cluster, never drift off into the page
-      if (left < 2 || left + width > 100 || top < -6 || top + height > 100) continue
+      // spill past the cluster on the top, right and bottom, but never left toward the headline
+      if (left < 0 || left + width > 118 || top < -22 || top + height > 118) continue
       out.push({ left, top, width, depth: ring.depth, light: `${30 + rand() * 40}% ${30 + rand() * 40}%` })
     }
   }
@@ -178,7 +178,7 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
         </nav>
       </header>
 
-      <main className="relative z-10 grid min-h-[calc(100vh-96px)] grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] items-center gap-10 pb-10 pl-16 pr-8">
+      <main className="relative z-10 grid min-h-[calc(100vh-96px)] grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] items-center gap-14 pb-10 pl-16 pr-16">
         <section className="relative z-20 flex flex-col gap-8">
           <h1
             className="rise font-display text-[clamp(72px,8vw,124px)] font-semibold leading-[0.95] tracking-[-0.05em]"
@@ -225,8 +225,8 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
                 top: `${far.top}%`,
                 width: `${far.width}%`,
                 zIndex: 1,
-                opacity: 0.1 + far.depth * 0.32,
-                filter: `brightness(${0.5 + far.depth * 0.3}) contrast(0.85)`,
+                opacity: 0.2 + far.depth * 0.4,
+                filter: `brightness(${0.55 + far.depth * 0.35}) contrast(0.9)`,
                 transform: `translate(${tilt.x * far.depth * -10}px, ${tilt.y * far.depth * -7}px)`,
               }}
             >
@@ -265,10 +265,8 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
                   className={`power-on relative aspect-video overflow-hidden rounded-xl bg-panel ring-1 ring-black transition-[filter] duration-500 ${focused === i ? 'brightness-110' : 'brightness-[0.7]'}`}
                   style={{ '--d': `${BOOT_MS + i * BOOT_STEP_MS}ms` } as React.CSSProperties}
                 >
-                  <div
-                    className="absolute inset-0"
-                    style={{ background: `radial-gradient(ellipse 75% 80% at ${feed.light}, #4a4a49 0%, #232322 58%, #101010 100%)` }}
-                  />
+                  <Footage src={feed.video} offset={i * 1.7} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/45" />
                   <div className="grain absolute inset-0" />
                   <span
                     className={`absolute flex gap-2 whitespace-nowrap ${feed.corner[0] === 't' ? 'top-2' : 'bottom-2'} ${feed.corner[1] === 'l' ? 'left-3' : 'right-3 flex-row-reverse'}`}
@@ -380,10 +378,8 @@ function HowItWorks() {
 
         <Step n={3} title="It watches. You decide." body="Only what breaks a rule reaches you, with the clip that shows it.">
           <div className="relative aspect-video overflow-hidden rounded-[4px] bg-panel">
-            <div
-              className="absolute inset-0"
-              style={{ background: 'radial-gradient(ellipse 75% 80% at 46% 44%, #4a4a49 0%, #232322 58%, #101010 100%)' }}
-            />
+            <Footage src="/footage/exit.mp4" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-black/40" />
             <div className="grain absolute inset-0" />
             <span className="absolute left-3 top-2 font-mono text-[10px] tracking-label text-text">CAM 02</span>
             {stage >= 2 && <Marker bbox={[0.3, 0.55, 0.44, 0.85]} title="bag blocking the exit" detail="5.4 s, flagged" small />}
@@ -404,6 +400,26 @@ function Step({ n, title, body, children }: { n: number; title: string; body: st
       </div>
       {children}
     </div>
+  )
+}
+
+// A looping stock clip styled like a security feed. offset starts each one at a different
+// point so the wall doesn't loop in sync.
+function Footage({ src, offset = 0 }: { src: string; offset?: number }) {
+  return (
+    <video
+      src={src}
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="auto"
+      onLoadedMetadata={(e) => {
+        const v = e.currentTarget
+        if (v.duration) v.currentTime = offset % v.duration
+      }}
+      className="absolute inset-0 h-full w-full object-cover [filter:grayscale(1)_contrast(1.1)_brightness(0.7)]"
+    />
   )
 }
 
