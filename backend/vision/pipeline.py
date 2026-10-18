@@ -16,6 +16,7 @@ import argparse
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from typing import Iterator
 
 import cv2
@@ -126,6 +127,8 @@ def main() -> None:
     parser.add_argument("--show", action="store_true", help="show the annotated feed (q to quit)")
     parser.add_argument("--demo-zone", action="store_true",
                         help="with --show: time non-person objects in a test zone on the right half")
+    parser.add_argument("--snapshots", default=None, help="with --demo-zone: save a JPEG when a timer hits 5 s")
+    parser.add_argument("--record", default=None, help="also save the raw feed to this .mp4 for replaying")
     args = parser.parse_args()
     if args.show:
         args.seconds = float("inf")  # run until q
@@ -135,29 +138,49 @@ def main() -> None:
     start, last_print, frames, last = None, 0.0, 0, None
     zone = {"name": "test_zone", "polygon": [[0.55, 0.35], [0.97, 0.35], [0.97, 0.97], [0.55, 0.97]]}
     entered: dict[int, float] = {}  # track_id -> ts it entered the test zone
+    seen_in_zone: dict[int, float] = {}  # track_id -> last ts seen inside (1 s grace for missed frames)
+    alerted: set[int] = set()
+    recorder = None
     try:
         for image, tf in pipe.frames():
             start = start or time.monotonic()
             frames += 1
             last = (image, tf)
+            if args.record:
+                if recorder is None:
+                    # Live frames arrive at the processing rate, so record at that rate.
+                    recorder = cv2.VideoWriter(args.record, cv2.VideoWriter_fourcc(*"mp4v"), 8, (tf.width, tf.height))
+                recorder.write(image)
             if args.show:
                 from vision.annotate import draw_annotations
                 zones, states = [], []
                 if args.demo_zone:
                     zones = [zone]
                     (zx1, zy1), (zx2, zy2) = zone["polygon"][0], zone["polygon"][2]
-                    inside = set()
+                    clock = time.strftime("%H:%M:%S")
                     for t in tf.tracks:
                         cx, cy = (t.bbox[0] + t.bbox[2]) / 2, t.bbox[3]  # bottom-center
                         if t.class_name != "person" and zx1 <= cx <= zx2 and zy1 <= cy <= zy2:
-                            inside.add(t.track_id)
-                            entered.setdefault(t.track_id, tf.ts)
+                            if t.track_id not in entered:
+                                entered[t.track_id] = tf.ts
+                                print(f"{clock} ENTER  {t.class_name} #{t.track_id} conf={t.conf:.2f}", flush=True)
+                            seen_in_zone[t.track_id] = tf.ts
                             elapsed = tf.ts - entered[t.track_id]
                             states.append({"track_id": t.track_id, "label": "In zone", "elapsed": elapsed,
                                            "duration": 5, "severity": "urgent" if elapsed >= 5 else "review"})
+                            if elapsed >= 5 and t.track_id not in alerted:
+                                alerted.add(t.track_id)
+                                print(f"{clock} 5 S    {t.class_name} #{t.track_id} still in zone -> RED", flush=True)
+                                if args.snapshots:
+                                    path = Path(args.snapshots) / f"zone_{t.track_id}_{int(tf.ts)}.jpg"
+                                    cv2.imwrite(str(path), draw_annotations(image, zones, tf.tracks, states))
+                                    print(f"         saved {path}", flush=True)
                     for track_id in list(entered):
-                        if track_id not in inside:
-                            del entered[track_id]
+                        if tf.ts - seen_in_zone[track_id] > 1.0:
+                            print(f"{clock} LEFT   #{track_id} after {seen_in_zone[track_id] - entered[track_id]:.1f} s",
+                                  flush=True)
+                            del entered[track_id], seen_in_zone[track_id]
+                            alerted.discard(track_id)
                 view = draw_annotations(image, zones, tf.tracks, states)
                 cv2.putText(view, f"{pipe.camera_id}  {pipe.fps:.1f} fps", (10, view.shape[0] - 12),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
@@ -165,13 +188,19 @@ def main() -> None:
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
             now = time.monotonic()
-            if now - last_print >= 2.0:
+            if now - last_print >= 2.0 and args.show:
+                seen = ", ".join(f"{t.class_name}#{t.track_id}" for t in tf.tracks)
+                print(f"{time.strftime('%H:%M:%S')} fps={pipe.fps:.1f} seen: {seen or 'nothing'}", flush=True)
+                last_print = now
+            elif now - last_print >= 2.0:
                 print(f"[{pipe.camera_id}] fps={pipe.fps:.1f} {tf.to_json()[:300]}")
                 last_print = now
             if pipe.capture.kind != "clip" and now - start > args.seconds:
                 break
     finally:
         pipe.stop()
+        if recorder is not None:
+            recorder.release()
         if args.show:
             cv2.destroyAllWindows()
 

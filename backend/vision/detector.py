@@ -87,7 +87,7 @@ class Detector:
         self.min_conf = min(confidence[c] for c in self.class_names)
 
     def detect(self, image: np.ndarray) -> list[Detection]:
-        result = self.model.predict(image, conf=self.min_conf, imgsz=self.imgsz,
+        result = self.model.predict(image, conf=self.min_conf, imgsz=self.imgsz, agnostic_nms=True,
                                     device=self.device, verbose=False)[0]
         return self.to_detections(result)
 
@@ -96,8 +96,10 @@ class Detector:
 
         The tracker sees boxes down to its low threshold (0.1) so it can keep
         tracks alive through weak frames; per-class thresholds apply afterwards.
+        NMS is class-agnostic: YOLO-World often labels one bag as both "backpack"
+        and "handbag", which would otherwise become two tracks and two alerts.
         """
-        result = self.model.track(image, persist=True, tracker=str(TRACKER_CFG), conf=0.1,
+        result = self.model.track(image, persist=True, tracker=str(TRACKER_CFG), conf=0.1, agnostic_nms=True,
                                   imgsz=self.imgsz, device=self.device, verbose=False)[0]
         return [d for d in self.to_detections(result) if d.track_id is not None]
 
