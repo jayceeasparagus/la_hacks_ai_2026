@@ -9,6 +9,14 @@ from engine.alerts import obstruction_alert, utc_now
 from engine.zones import bbox_in_zone, validate_polygon
 
 
+def bbox_iou(a, b) -> float:
+    intersection = max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(
+        0, min(a[3], b[3]) - max(a[1], b[1]))
+    area_a = (a[2] - a[0]) * (a[3] - a[1])
+    area_b = (b[2] - b[0]) * (b[3] - b[1])
+    return intersection / (area_a + area_b - intersection)
+
+
 @dataclass
 class _Incident:
     id: str
@@ -111,6 +119,26 @@ class RuleEngine:
                 elif key[1] in inside and inside[key[1]].object_class != incident.track.object_class:
                     states.append(self._state(rule, incident, tf.ts, 'cleared'))
                     del self._incidents[key]
+
+            # Only recover an ID if both sides of the spatial match are unique.
+            # A currently observed old ID is never eligible for recovery.
+            candidates = {}
+            for track_id, track in inside.items():
+                if (rule.id, track_id) in self._incidents:
+                    continue
+                candidates[track_id] = [key for key, incident in self._incidents.items()
+                    if key[0] == rule.id and key[1] not in all_tracks
+                    and incident.outside_since is None
+                    and tf.ts - incident.last_seen <= 1.0 + 1e-9
+                    and track.object_class == incident.track.object_class
+                    and bbox_iou(track.bbox, incident.track.bbox) >= 0.5]
+            for track_id, keys in candidates.items():
+                if len(keys) != 1:
+                    continue
+                key = keys[0]
+                if sum(key in matches for matches in candidates.values()) != 1:
+                    continue
+                self._incidents[(rule.id, track_id)] = self._incidents.pop(key)
 
             for track_id, track in inside.items():
                 key = (rule.id, track_id)

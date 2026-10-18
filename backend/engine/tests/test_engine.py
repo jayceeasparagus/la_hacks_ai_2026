@@ -62,6 +62,48 @@ class TemporalEngineTests(unittest.TestCase):
                 self.assertEqual(len(engine.update(None, self.frame(4 + gap))[1]), expected)
 
 
+    def test_simultaneous_overlapping_objects_do_not_merge(self):
+        engine = self.engine()
+        alerts = []
+        for tick in range(61):
+            frame = self.frame(tick / 10)
+            frame.tracks.append(frame.tracks[0].model_copy(update={'track_id': 2}))
+            alerts.extend(engine.update(None, frame)[1])
+        self.assertEqual({alert.track_id for alert in alerts}, {1, 2})
+        self.assertEqual(len(alerts), 2)
+
+
+    def test_ambiguous_id_recovery_does_not_merge(self):
+        engine = self.engine()
+        for tick in range(41):
+            frame = self.frame(tick / 10)
+            frame.tracks.append(frame.tracks[0].model_copy(update={'track_id': 2}))
+            engine.update(None, frame)
+        # Both vanished tracks match this new box: start a fresh timer.
+        for tick in range(41, 91):
+            self.assertEqual(engine.update(None, self.frame(tick / 10, track_id=3))[1], [])
+        alerts = engine.update(None, self.frame(9.1, track_id=3))[1]
+        self.assertEqual(len(alerts), 1)
+
+
+    def test_outside_track_is_not_reidentified(self):
+        engine = self.engine()
+        self.run_frames(engine, [self.frame(tick / 10) for tick in range(41)])
+        frame = self.frame(4.1, track_id=2)
+        frame.tracks.append(Track(track_id=1, object_class='backpack',
+                                  bbox=(0.01, 0.1, 0.1, 0.7), confidence=0.9))
+        self.assertEqual(engine.update(None, frame)[1], [])
+        for tick in range(42, 91):
+            self.assertEqual(engine.update(None, self.frame(tick / 10, track_id=2))[1], [])
+
+
+    def test_id_switch_after_alert_does_not_duplicate(self):
+        engine = self.engine()
+        frames = [self.frame(tick / 10, track_id=1 if tick < 60 else 2)
+                  for tick in range(81)]
+        self.assertEqual(len(self.run_frames(engine, frames)), 1)
+
+
     def test_alert_closes_after_exact_two_seconds(self):
         engine = self.engine()
         self.run_frames(engine, [self.frame(tick / 10) for tick in range(61)])
