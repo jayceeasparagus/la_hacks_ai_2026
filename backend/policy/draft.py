@@ -42,10 +42,15 @@ class DraftPolicy(BaseModel):
 
 def build_draft_schema(zones: list[Zone]) -> dict:
     """JSON schema for DraftPolicy with zone_id restricted to the real zone ids plus UNKNOWN."""
-    schema = _strip_keys(_inline_refs(DraftPolicy.model_json_schema()), {"title", "default"})
+    schema = structured_output_schema(DraftPolicy)
     zone_id = schema["properties"]["rules"]["items"]["properties"]["zone_id"]
     zone_id["enum"] = [z.id for z in zones] + [UNKNOWN_ZONE]
     return schema
+
+
+def structured_output_schema(model: type[BaseModel]) -> dict:
+    """A Pydantic model's JSON schema in the subset Gemini accepts: $refs inlined, no titles/defaults."""
+    return _strip_keys(_inline_refs(model.model_json_schema()), {"title", "default"})
 
 
 def _inline_refs(schema: dict) -> dict:
