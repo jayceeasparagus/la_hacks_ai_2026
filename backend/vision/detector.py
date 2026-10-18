@@ -45,6 +45,8 @@ PROMPTS = {
     "cell phone": None,
 }
 CLASSES = list(dict.fromkeys(c for c in PROMPTS.values() if c))
+DECOYS = [p for p, c in PROMPTS.items() if c is None]
+DECOY_CONFIDENCE = 0.25
 
 # minimum confidence per contract class
 CONFIDENCE = {
@@ -90,6 +92,10 @@ class Detector:
         self.model = load_model(prompts)
         # model output index -> contract class name
         self.class_names = [prompts[p] for p in prompts]
+        self.prompt_names = list(prompts)
+        # Testing aid: report decoys (e.g. "cell phone") under their prompt name
+        # instead of dropping them. Off in the real pipeline.
+        self.report_decoys = False
         self.min_conf = min(confidence[c] for c in self.class_names if c)
         # track_id -> confidence-weighted class votes, so one bag does not flip
         # between backpack / handbag / suitcase from frame to frame
@@ -145,7 +151,11 @@ class Detector:
         detections = []
         for box, conf, cls_index, track_id in zip(xyxyn, confs, classes, ids):
             cls = self.class_names[cls_index]
-            if cls is None or conf < self.confidence[cls]:
+            if cls is None:
+                if not self.report_decoys or conf < DECOY_CONFIDENCE:
+                    continue
+                cls = self.prompt_names[cls_index]
+            elif conf < self.confidence[cls]:
                 continue
             bbox = tuple(round(float(v), 4) for v in box)
             detections.append(Detection(cls, round(float(conf), 3), bbox,

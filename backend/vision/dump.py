@@ -19,7 +19,7 @@ from pathlib import Path
 import cv2
 
 from vision.annotate import draw_annotations
-from vision.detector import CLASSES
+from vision.detector import CLASSES, DECOYS
 from vision.pipeline import VisionPipeline
 
 SWITCH_GAP_SECONDS = 1.0
@@ -47,10 +47,11 @@ def find_id_switches(tracks: dict[int, dict]) -> list[tuple[int, int, float]]:
     return switches
 
 
-def dump(clip: Path, camera_id: str, imgsz: int) -> None:
+def dump(clip: Path, camera_id: str, imgsz: int, show_decoys: bool = False) -> None:
     tracks_path = clip.with_suffix(".tracks.jsonl")
     video_path = clip.with_suffix(".annotated.mp4")
     pipe = VisionPipeline(camera_id, f"clip:{clip}", imgsz=imgsz)
+    pipe.detector.report_decoys = show_decoys
     fps = pipe.capture.fps
 
     counts, frames_with = Counter(), Counter()
@@ -79,7 +80,7 @@ def dump(clip: Path, camera_id: str, imgsz: int) -> None:
     elapsed = time.monotonic() - start
     print(f"{clip.name}: {frames} frames in {elapsed:.1f} s ({frames / max(elapsed, 1e-9):.1f} fps)")
     print(f"  wrote {tracks_path.name} and {video_path.name}")
-    for cls in CLASSES:
+    for cls in CLASSES + (DECOYS if show_decoys else []):
         ids = sorted((i for i, t in tracks.items() if t["cls"] == cls), key=lambda i: -tracks[i]["seen"])
         if not counts[cls]:
             continue
@@ -99,10 +100,12 @@ def main() -> None:
     parser.add_argument("clips", nargs="+", help="video files (a clip: prefix is optional)")
     parser.add_argument("--camera-id", default=None, help="default: the clip's file name")
     parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--show-decoys", action="store_true",
+                        help='also report decoy prompts like "cell phone" (testing only)')
     args = parser.parse_args()
     for name in args.clips:
         clip = Path(name.removeprefix("clip:"))
-        dump(clip, args.camera_id or clip.stem, args.imgsz)
+        dump(clip, args.camera_id or clip.stem, args.imgsz, args.show_decoys)
 
 
 if __name__ == "__main__":
