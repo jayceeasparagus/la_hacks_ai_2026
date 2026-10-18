@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from app.adapters import demo_compile, validate_compile_result
 from app.demo import demo_cameras, demo_zones
 from app.models import Camera
-from app.pipelines import FakePipeline, adapt_track_frame
+from app.pipelines import FakePipeline, VisionAdapter, adapt_track_frame
 from engine.demo_recording import write_demo
 
 
@@ -42,3 +44,19 @@ class AdapterTests(unittest.TestCase):
 
     def test_missing_zone_does_not_create_unbound_rule(self):
         self.assertFalse(demo_compile('Only clear bags', []).rules)
+
+    def test_live_source_clock_resets_after_disconnect_without_index_rewind(self):
+        class Inner:
+            status = 'online'
+            def __init__(self, *args, **kwargs): pass
+            def frames(self):
+                for index, ts in [(10,100), (11,110)]:
+                    yield None, {'ts':ts,'frame_index':index,'tracks':[]}
+            def stop(self): pass
+        module = SimpleNamespace(VisionPipeline=Inner)
+        with patch.dict('sys.modules', {'vision': SimpleNamespace(), 'vision.pipeline': module}):
+            adapter = VisionAdapter(Camera(id='cam', name='Live', source='webcam:0'))
+        frames = adapter.frames()
+        self.assertEqual(next(frames)[1].ts, 0)
+        adapter.reset_session()
+        self.assertEqual(next(frames)[1].ts, 0)

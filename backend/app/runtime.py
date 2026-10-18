@@ -215,9 +215,14 @@ class Monitor:
                             updated = self.store.apply_evidence(patch)
                             self.hub.publish('alert_updated', updated.model_dump(mode='json'))
                         self._status(runtime, 'offline', 'Recorded source ended')
-                    self._collect(engine)
                     if runtime.pipeline is not None and getattr(runtime.pipeline, 'status', None) == 'offline':
+                        if runtime.status != 'offline':
+                            engine.reset()
+                            runtime.last_frame_ts = None
+                            if hasattr(runtime.pipeline, 'reset_session'):
+                                runtime.pipeline.reset_session()
                         self._status(runtime, 'offline', 'Camera source unavailable')
+                    self._collect(engine)
                     if now - last_publish >= 0.2:
                         states = [] if ended else [state.model_dump(mode='json') for state in engine.snapshot_states()]
                         with self._lock:

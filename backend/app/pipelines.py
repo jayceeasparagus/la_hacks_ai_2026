@@ -86,6 +86,7 @@ class VisionAdapter:
         self._last_index = None
         self._stop_lock = threading.Lock()
         self._stopped = False
+        self._reset_clock = threading.Event()
 
     @property
     def status(self):
@@ -93,13 +94,20 @@ class VisionAdapter:
 
     def frames(self):
         for image, raw in self.pipeline.frames():
-            data = raw.model_dump() if hasattr(raw, 'model_dump') else asdict(raw)
+            data = (raw.model_dump() if hasattr(raw, 'model_dump')
+                    else asdict(raw) if is_dataclass(raw) else raw)
             index = data.get('frame_index')
+            if self._reset_clock.is_set():
+                self._origin = None
+                self._reset_clock.clear()
             if self._origin is None or (index is not None and self._last_index is not None
                                         and index < self._last_index):
                 self._origin = data['ts'] if not self.camera.source.startswith('clip:') else 0
             self._last_index = index
             yield image, adapt_track_frame(data, self.camera.id, origin=self._origin)
+
+    def reset_session(self):
+        self._reset_clock.set()
 
     def stop(self):
         with self._stop_lock:
