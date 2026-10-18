@@ -123,28 +123,28 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
       </header>
 
       <main className="relative z-10 grid min-h-[calc(100vh-96px)] grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] items-center gap-14 pb-10 pl-16 pr-16">
-        <section className="relative z-20 flex flex-col gap-8">
+        <section className="relative z-20 flex flex-col gap-10">
           <h1
-            className="rise font-display text-[clamp(60px,6.4vw,100px)] font-semibold leading-[0.95] tracking-[-0.035em]"
+            className="rise font-display text-[clamp(76px,9vw,136px)] font-semibold leading-[0.95] tracking-[-0.035em]"
             style={{ '--d': '80ms' } as React.CSSProperties}
           >
             <span className="text-text">Watch</span>
             <span className="text-accent">Dog</span>
           </h1>
           <p
-            className="rise max-w-[520px] text-balance text-[24px] leading-[36px] text-[#C9C6BF]"
+            className="rise max-w-[600px] text-balance text-[30px] leading-[42px] text-[#C9C6BF]"
             style={{ '--d': '200ms' } as React.CSSProperties}
           >
             Tell any camera what matters, in a sentence. It watches. You decide.
           </p>
           <div className="rise flex items-center gap-8" style={{ '--d': '300ms' } as React.CSSProperties}>
-            <button className="btn-primary group" onClick={() => go('setup')}>
+            <button className="btn-primary group px-8 py-4 text-[19px]" onClick={() => go('setup')}>
               Get started
               <span className="transition-transform duration-300 group-hover:translate-x-1">
                 <Arrow />
               </span>
             </button>
-            <a href="#how" className="text-[17px] text-muted transition hover:text-text">
+            <a href="#how" className="text-[19px] text-muted transition hover:text-text">
               See how it works
             </a>
           </div>
