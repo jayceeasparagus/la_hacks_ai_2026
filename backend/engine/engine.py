@@ -97,6 +97,21 @@ class RuleEngine:
                       if track.object_class in rule.objects
                       and bbox_in_zone(track.bbox, zone.polygon)}
 
+            # Close expired incidents BEFORE matching/re-entry, including when a
+            # sparse input jumps straight to a new observed frame.
+            for key, incident in list(self._incidents.items()):
+                if key[0] != rule.id:
+                    continue
+                absent_for = tf.ts - (incident.outside_since
+                                     if incident.outside_since is not None
+                                     else incident.last_seen)
+                if absent_for >= 2.0 - 1e-9:
+                    states.append(self._state(rule, incident, tf.ts, 'cleared'))
+                    del self._incidents[key]
+                elif key[1] in inside and inside[key[1]].object_class != incident.track.object_class:
+                    states.append(self._state(rule, incident, tf.ts, 'cleared'))
+                    del self._incidents[key]
+
             for track_id, track in inside.items():
                 key = (rule.id, track_id)
                 incident = self._incidents.get(key)
@@ -126,8 +141,22 @@ class RuleEngine:
                 states.append(self._state(rule, incident, tf.ts,
                                           'alerted' if incident.alerted else 'timing'))
 
-            for key, incident in list(self._incidents.items()):
-                if key[0] == rule.id and key[1] not in inside:
-                    states.append(self._state(rule, incident, tf.ts, 'cleared'))
-                    del self._incidents[key]
+            for key, incident in self._incidents.items():
+                if key[0] != rule.id or key[1] in inside:
+                    continue
+                if key[1] in all_tracks:
+                    if incident.outside_since is None:
+                        incident.outside_since = tf.ts
+                    if not incident.alerted:
+                        incident.entered = None
+                        incident.confidence_sum = 0
+                        incident.observations = 0
+                elif (incident.outside_since is None
+                      and tf.ts - incident.last_seen <= 1.0 + 1e-9):
+                    states.append(self._state(rule, incident, tf.ts,
+                                              'alerted' if incident.alerted else 'timing'))
+                elif not incident.alerted:
+                    incident.entered = None
+                    incident.confidence_sum = 0
+                    incident.observations = 0
         return states, alerts

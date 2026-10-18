@@ -47,6 +47,31 @@ class TemporalEngineTests(unittest.TestCase):
         self.assertEqual(alerts[0].ts, 5)
 
 
+    def test_missing_frame_cannot_trigger(self):
+        engine = self.engine()
+        self.run_frames(engine, [self.frame(tick / 10) for tick in range(48)])
+        self.assertEqual(engine.update(None, self.frame(5, empty=True))[1], [])
+        self.assertEqual(len(engine.update(None, self.frame(5.4))[1]), 1)
+
+
+    def test_exact_grace_boundary_and_long_gap(self):
+        for gap, expected in [(1.0, 1), (1.1, 0)]:
+            with self.subTest(gap=gap):
+                engine = self.engine()
+                self.run_frames(engine, [self.frame(tick / 10) for tick in range(41)])
+                self.assertEqual(len(engine.update(None, self.frame(4 + gap))[1]), expected)
+
+
+    def test_alert_closes_after_exact_two_seconds(self):
+        engine = self.engine()
+        self.run_frames(engine, [self.frame(tick / 10) for tick in range(61)])
+        states, _ = engine.update(None, self.frame(7.9, empty=True))
+        self.assertFalse(any(state.phase == 'cleared' for state in states))
+        states, _ = engine.update(None, self.frame(8, empty=True))
+        self.assertEqual([state.phase for state in states], ['cleared'])
+        self.assertEqual(engine.update(None, self.frame(8.1, empty=True)), ([], []))
+
+
     def test_wrong_camera_and_rewind_do_not_mutate_state(self):
         engine = self.engine()
         engine.update(None, self.frame(1))
