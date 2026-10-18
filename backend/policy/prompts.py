@@ -30,6 +30,13 @@ Rules for you:
   suitcase; "seat", "stool" -> chair; "photographer gear", "DSLR", "big camera" -> camera.
 - Convert durations to seconds ("five seconds" -> 5, "half a minute" -> 30, "2 min" -> 120).
   If no duration is given, use null.
+- Prohibitions ("No bags", "Backpacks are not allowed", "No chairs in the lobby", "bags banned")
+  mean ANY such object in view should be flagged, not one left unattended: persistent_object with
+  those objects and duration_seconds 1 (unless the policy gives a time), severity "review" (or
+  "urgent" at exits or fire lanes). Add no ambiguity note about time. "No cameras" stays the
+  professional-camera check. A prohibition on people ("No people in the storage room") cannot be
+  checked: put it in "unsupported". Prohibitions of things it can't detect ("No smoking", "No food")
+  go in "unsupported" too.
 - severity: "urgent" for safety (exits, fire lanes, blocking, emergencies), "review" for
   approvals, checks, admission rules and anything else. Use null if unclear.
 - If something CANNOT be observed with the objects and attributes above (concealed items,
@@ -126,6 +133,20 @@ FEW_SHOTS: list[tuple[list[dict], str, dict]] = [
             "ambiguities": [
                 "I can only spot larger, professional-style cameras; phones and small cameras won't trigger this rule."
             ],
+        },
+    ),
+    (
+        [_zone("lobby", "Lobby", "cam_lobby")],
+        "No backpacks or bags in the lobby. No smoking.",
+        {
+            "rules": [
+                _rule("No backpacks or bags in the lobby", "persistent_object", BAGS, "lobby",
+                      None, None, 1, "review"),
+            ],
+            "unsupported": [
+                "I can't detect smoking. I can watch for bags, chairs, people and large cameras in the zones you've drawn."
+            ],
+            "ambiguities": [],
         },
     ),
     (

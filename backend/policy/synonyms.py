@@ -137,6 +137,30 @@ def _zone_scores(text: str, zones: list[Zone]) -> list[tuple[int, Zone]]:
     return [(-s, z) for s, _, z in sorted(scored, key=lambda x: (x[0], x[1]))]
 
 
+# --- prohibitions ("No bags", "Bags are not allowed") -----------------------------------
+# A prohibition means any such object in view is flagged, not one that stays too long.
+
+PROHIBITION = re.compile(
+    r"\b(?:no|zero)[\s-]+(?!(?:more|longer|later|less|fewer|than|one|time|need|exceptions?)\b)[a-z]"
+    r"|\bnot\s+(?:be\s+)?(?:allowed|permitted|welcome)\b|\bdisallowed\b"
+    r"|\b(?:ban|bans|banned|prohibit\w*|forbid\w*)\b"
+    r"|\b(?:don't|do not|never)\s+(?:let\s+\w+\s+)?(?:allow|permit|bring|carry)\b"
+    r"|\b(?:can't|cannot|can not|may not|must not|mustn't)\s+(?:be\s+)?(?:brought|carried|allowed|permitted)\b"
+)
+# Wording that makes it a "stays too long", obstruction or clear-bag rule instead.
+_NOT_PROHIBITION = re.compile(r"\b(?:leav\w*|left|unattended|abandon\w*|block\w*|obstruct\w*|clear|transparent)\b")
+PERSON_PROHIBITION_UNSUPPORTED = (
+    "I can't alert on every person in view, because anyone walking through would alert. I can flag bags, "
+    "chairs and large cameras, or check people for hard hats and safety vests."
+)
+
+
+def is_prohibition(text: str) -> bool:
+    """True for "No bags", "Bags are not allowed" and similar, with no time limit stated."""
+    low = text.lower().replace("’", "'")
+    return bool(PROHIBITION.search(low)) and not _NOT_PROHIBITION.search(low) and parse_duration(low) is None
+
+
 # --- person down (stretch goal, needs the lying_down attribute in the contracts) -------------
 
 PERSON_DOWN = re.compile(

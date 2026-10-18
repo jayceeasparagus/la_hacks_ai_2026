@@ -13,13 +13,15 @@ from policy.contracts import Attribute, CompileResult, Rule, Zone
 from policy.draft import DraftPolicy, DraftRule
 from policy.synonyms import (
     BAGS, GENERIC_UNSUPPORTED, PERSISTENT_OBJECTS, PERSON_DOWN, PERSON_DOWN_UNSUPPORTED, classify_unsupported,
-    default_severity, normalize_objects, objects_with_attribute, person_down_enabled, zones_named_in,
+    default_severity, is_prohibition, normalize_objects, objects_with_attribute, person_down_enabled, zones_named_in,
 )
 
 MIN_DURATION_S = 0.5
 MAX_DURATION_S = 600.0
 DEFAULT_ATTRIBUTE_DURATION_S = 1.0
 DEFAULT_PERSISTENT_DURATION_S = 10.0
+# "No bags": any such object in view, so only long enough to skip a one-frame false detection.
+PROHIBITION_DURATION_S = 1.0
 MAX_RULES = 10
 MAX_UNSUPPORTED_CHARS = 300
 
@@ -84,6 +86,7 @@ def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str],
     source = _clean(d.source_text) or "this rule"
     quote = f"'{_shorten(source)}'"
 
+    prohibition = is_prohibition(source)
     objects, dropped = normalize_objects(list(d.objects))
     if dropped:
         warnings.append(f"Ignored {', '.join(dropped)} in {quote}: I can only detect bags, chairs, people and cameras.")
@@ -97,7 +100,8 @@ def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str],
         if d.attribute_name is None:
             if [o for o in objects if o in PERSISTENT_OBJECTS]:
                 rule_type = "persistent_object"
-                warnings.append(f"Treated {quote} as a 'stays too long' rule because there's no attribute I can check.")
+                if not prohibition:  # "No bags" is a persistent rule by design
+                    warnings.append(f"Treated {quote} as a 'stays too long' rule because there's no attribute I can check.")
             else:
                 warnings.append(f"I couldn't find anything I can check in {quote}, so I skipped it.")
                 return None, False
@@ -143,12 +147,19 @@ def _finalize_rule(d: DraftRule, zones: list[Zone], warnings: list[str],
     if zone is None:
         return None, False
 
-    duration, defaulted = _duration(d.duration_seconds, rule_type, quote, warnings)
+    rule_id = name = "pending"  # filled in by _assign_ids_and_names once all rules are known
+    if prohibition and rule_type == "persistent_object":
+        # The text states no time (is_prohibition checks), so ignore any time the model made up.
+        # defaulted=True also drops the model's own "no time limit" note.
+        duration, defaulted = PROHIBITION_DURATION_S, True
+        noun = _object_noun(objects)
+        rule_id, name = f"no_{noun}s", f"No-{noun} policy"  # engine/alerts.py keys its wording on "no_"
+    else:
+        duration, defaulted = _duration(d.duration_seconds, rule_type, quote, warnings)
     severity = d.severity or default_severity(source)
 
-    # id and name are filled in by _assign_ids_and_names once all rules are known.
     rule = Rule(
-        id="pending", name="pending", type=rule_type, objects=objects, zone=zone.id, attribute=attribute,
+        id=rule_id, name=name, type=rule_type, objects=objects, zone=zone.id, attribute=attribute,
         duration_seconds=duration, severity=severity,
     )
     return rule, defaulted
@@ -226,7 +237,10 @@ def _assign_ids_and_names(rules: list[Rule], zones: list[Zone]) -> None:
     zone_names = {z.id: z.name for z in zones}
     used: set[str] = set()
     for rule in rules:
-        base_id, name = _purpose(rule, zone_names.get(rule.zone, rule.zone))
+        if rule.id == "pending":
+            base_id, name = _purpose(rule, zone_names.get(rule.zone, rule.zone))
+        else:
+            base_id, name = rule.id, rule.name
         rule_id, n = base_id, 1
         while rule_id in used:  # the engine keys incidents by rule id, so ids must be unique
             n += 1

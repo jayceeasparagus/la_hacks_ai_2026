@@ -46,15 +46,25 @@ def _alert(*, incident_id: str, camera_id: str, rule: Rule, track: Track, ts: fl
     )
 
 
+def is_prohibition(rule: Rule) -> bool:
+    # The compiler marks "No bags" style rules with ids like no_bags, no_chairs, no_bags_2.
+    return rule.id.startswith('no_')
+
+
 def obstruction_alert(*, incident_id: str, camera_id: str, rule: Rule,
                       track: Track, ts: float, elapsed: float, confidence: float,
                       zone_name: str | None, created_at: str) -> Alert:
     """A persistent object stayed in its zone; exit zones keep the demo wording."""
-    is_exit = any('exit' in value.lower() for value in (rule.id, rule.zone, zone_name or ''))
+    if is_prohibition(rule):
+        title = f'Possible {track.object_class} in view'
+    elif any('exit' in value.lower() for value in (rule.id, rule.zone, zone_name or '')):
+        title = 'Possible exit obstruction'
+    else:
+        title = f'Possible {rule.name.lower()}'
     return _alert(
         incident_id=incident_id, camera_id=camera_id, rule=rule, track=track, ts=ts,
         elapsed=elapsed, confidence=confidence, created_at=created_at,
-        title='Possible exit obstruction' if is_exit else f'Possible {rule.name.lower()}',
+        title=title,
         observation=(f'{_article(track.object_class)} {track.object_class} was observed'
                      f'{_in_zone(zone_name) or " in view"} for {elapsed:.1f} seconds, '
                      'allowing brief detection gaps.'),

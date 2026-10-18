@@ -59,6 +59,32 @@ cameras (`PUT /api/policy` is allowed while monitoring); the videos keep playing
 - Labels on the stream are neutral: "Hard hat: yes" (green), "not seen" (amber), "unclear" or
   "checking" (gray).
 
+### Add a video to `/#/demo`
+
+1. Put the clip in `clips/pexels/` (add its link to `clips/SOURCES.md`) and dump its tracks, from
+   `backend/` (needs Person 1's vision requirements and `backend/vision/weights/yolov8s-worldv2.pt`):
+
+   ```sh
+   python -m vision.dump ../clips/pexels/loading_dock_123.mp4
+   # options: --imgsz 640 (default), --camera-id (unused by loop: sources, the scene's id wins)
+   ```
+
+   It writes `loading_dock_123.tracks.jsonl` and `loading_dock_123.annotated.mp4` next to the clip,
+   and prints per-class detection counts, unique ids and the longest tracks.
+2. Add a camera to `site_safety.json` with
+   `"source": "loop:../../clips/pexels/loading_dock_123.tracks.jsonl@../../clips/pexels/loading_dock_123.mp4"`
+   (paths are relative to the scene file), a whole-frame zone `[[0, 0], [1, 0], [1, 1], [0, 1]]`
+   for it, and, for gear checks, a `cached_verdicts.cameras` entry (see the note above). At most 3 cameras.
+
+Prohibition rules like "No backpacks or bags" alert only on what the dump detected: a `backpack`,
+`handbag` or `suitcase` track lasting at least about 1 s. The current clips have none
+(warehouse: three handbag flickers, longest 0.4 s; construction: one backpack, 0.25 s), so pick
+footage where a bag is clearly visible for a few seconds. Check a dump from `backend/`:
+
+```sh
+python -c "import json,sys;s={};[s.setdefault((t['class_name'],t['track_id']),[f['ts']]).append(f['ts']) for f in map(json.loads,open(sys.argv[1])) for t in f['tracks'] if t['class_name']!='person'];[print(*k,f'{min(v):.1f}-{max(v):.1f} s') for k,v in s.items()]" ../clips/pexels/loading_dock_123.tracks.jsonl
+```
+
 ## Run a scene
 
 From `backend/`:

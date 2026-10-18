@@ -10,8 +10,9 @@ import re
 from policy.contracts import Zone
 from policy.draft import UNKNOWN_ZONE, DraftPolicy, DraftRule
 from policy.synonyms import (
-    ALL_PPE, BAGS, HARD_HAT, PERSON_DOWN, SAFETY_VEST, WEAR_REQUIREMENT, classify_unsupported_topic, objects_in_text,
-    parse_duration, zones_mentioned, zones_named_in,
+    ALL_PPE, BAGS, GENERIC_UNSUPPORTED, HARD_HAT, PERSON_DOWN, PERSON_PROHIBITION_UNSUPPORTED, PROHIBITION, SAFETY_VEST,
+    WEAR_REQUIREMENT, classify_unsupported_topic, is_prohibition, objects_in_text, parse_duration, zones_mentioned,
+    zones_named_in,
 )
 
 # Unsupported topics worth reporting even inside a sentence that also produced a rule.
@@ -84,7 +85,24 @@ def compile_fallback(prompt: str, zones: list[Zone]) -> DraftPolicy | None:
                 zone_id=_exit_zone(named, zones), attribute_name=None, attribute_expected=None,
                 duration_seconds=parse_duration(clause), severity="urgent",
             ))
-        elif not found and LEFT_BEHIND.search(low) and things:
+        elif not found and is_prohibition(clause):
+            # "No bags", "Chairs are not allowed": any such object in view (capability sets the short time).
+            if things:
+                found += [DraftRule(
+                    source_text=clause, type="persistent_object", objects=things,
+                    zone_id=z.id if z else UNKNOWN_ZONE, attribute_name=None, attribute_expected=None,
+                    duration_seconds=None, severity=None,
+                ) for z in attribute_zones]
+            elif "camera" in objects:
+                found += [_attribute_rule(clause, ["camera"], z, "professional", False) for z in attribute_zones]
+            elif "person" in objects and PERSON_PROHIBITION_UNSUPPORTED not in unsupported:
+                unsupported.append(PERSON_PROHIBITION_UNSUPPORTED)
+            elif not objects and not classify_unsupported_topic(_without_zone_names(clause, zones)):
+                # "No smoking", "No food": nothing the cameras can detect.
+                if GENERIC_UNSUPPORTED not in unsupported:
+                    unsupported.append(GENERIC_UNSUPPORTED)
+        elif not found and (LEFT_BEHIND.search(low) or PROHIBITION.search(low)) and things:
+            # Includes a timed prohibition ("No bags here for more than 30 seconds").
             found.append(DraftRule(
                 source_text=clause, type="persistent_object", objects=things,
                 zone_id=zone.id if zone else UNKNOWN_ZONE, attribute_name=None, attribute_expected=None,

@@ -65,6 +65,13 @@ Dependencies: google-genai, pydantic, python-dotenv, opencv-python, numpy, pytes
 - Persistent rules never include `person`. The one exception is the person-down rule (`lying_down`).
 - When the fallback finds no duration it leaves it null, so capability's default (10 s, with a warning)
   applies. Briefing 7.7 said to default to 5, but test 5 expects 10 for "Keep the exit clear".
+- Prohibitions ("No bags", "Chairs are not allowed", "Backpacks are banned"; `synonyms.is_prohibition`, no
+  time stated, no leave/unattended/block/clear words) mean any such object in view: a persistent rule with
+  1 s, severity from the text (review, urgent at exits), no time warning, even if the model invented a time.
+  Ids are `no_bags` / `no_chairs` / `no_objects` ("No-bag policy"). The `no_` prefix is a convention that
+  `engine/alerts.py` ("Possible backpack in view") and `Demo.tsx` ("Any bag in view") key on, because Rule
+  has no field for it. "No cameras" stays the pro-camera check; "No people" and "No smoking" go to unsupported.
+  Why: live Gemini compiled "No backpacks or bags." to a 10 s "unattended_bag" rule with a time warning.
 - `llm.py` has a circuit breaker: after 3 failures in a row, Gemini is skipped for 30 s, so offline
   compiles go straight to the fallback and verifications return "verification unavailable".
   `llm.status()` reports the mode, the models, whether a key is set and whether Gemini is paused,

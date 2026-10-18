@@ -41,6 +41,12 @@ function groupRules(rules: Rule[]): RuleGroup[] {
 // Cameras are judged as a whole frame here, so no wording mentions zones.
 function condition(rule: Rule): string {
   if (rule.type === 'persistent_object') {
+    // The backend's convention for prohibitions ("No bags", "No chairs") is an id starting
+    // with no_; those read as a ban, not a dwell time.
+    if (rule.id.startsWith('no_')) {
+      const base = `Any ${objectsLabel(rule.objects)} in view`
+      return rule.duration_seconds > 1 ? `${base} for ${rule.duration_seconds} s or more` : base
+    }
     return `A ${objectsLabel(rule.objects)} stays in view for ${rule.duration_seconds} s or more`
   }
   return ruleCondition(rule)
