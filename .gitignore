@@ -21,3 +21,6 @@ clips/*
 .claude/worktrees/
 .DS_Store
 Thumbs.db
+
+# Downloaded datasets and derived crops (licenses in clips/SOURCES.md)
+datasets/

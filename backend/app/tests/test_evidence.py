@@ -72,7 +72,7 @@ class EvidenceTests(unittest.TestCase):
         path = self.writer.resolve(f'{name}.jpg')
         self.assertIsNotNone(path)
         written = cv2.imread(str(path))
-        self.assertEqual(written.shape, (120, 160, 3))
+        self.assertEqual(written.shape, (480, 640, 3))  # small frames are upscaled to MIN_EVIDENCE_WIDTH
         self.assertGreater(int(np.abs(written.astype(int) - 50).sum()), 0)   # box and label drawn
         self.assertEqual(sorted(p.name for p in self.root.iterdir()), [f'{name}.jpg'])
 

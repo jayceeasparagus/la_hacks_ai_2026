@@ -23,6 +23,7 @@ from app.models import Alert
 
 FILENAME = re.compile(r'^[A-Za-z0-9_-]+\.(jpg|mp4)$')
 FONT = cv2.FONT_HERSHEY_SIMPLEX
+MIN_EVIDENCE_WIDTH = 640  # evidence images from smaller sources are upscaled to this width
 REVIEW_COLOR = (0, 170, 255)  # BGR, same as vision.annotate
 URGENT_COLOR = (40, 40, 230)
 CODECS = ('avc1', 'mp4v')  # H.264 plays in browsers; mp4v is the fallback
@@ -64,14 +65,25 @@ def annotate_alert(frame: np.ndarray, alert: Alert, snapshot_ts: float | None = 
     """
     out = np.ascontiguousarray(_bgr(frame), dtype=np.uint8).copy()
     h, w = out.shape[:2]
+    if w < MIN_EVIDENCE_WIDTH:  # small sources (e.g. 384 px CCTV): upscale so labels stay readable
+        scale = MIN_EVIDENCE_WIDTH / w
+        out = cv2.resize(out, (MIN_EVIDENCE_WIDTH, round(h * scale)), interpolation=cv2.INTER_LINEAR)
+        h, w = out.shape[:2]
     color = URGENT_COLOR if alert.severity == 'urgent' else REVIEW_COLOR
     x1, y1, x2, y2 = alert.bbox
     p1, p2 = (int(x1 * w), int(y1 * h)), (int(x2 * w), int(y2 * h))
     cv2.rectangle(out, p1, p2, color, 2, cv2.LINE_AA)
-    height = _label(out, alert.title, p1[0], p1[1], color)
+    (_, th), base = cv2.getTextSize(alert.title, FONT, 0.5, 1)
+    line = th + base + 4
     source_ts = alert.ts if snapshot_ts is None else snapshot_ts
     tag = f'{alert.camera_id} | source {source_ts:.2f}s | {alert.object_class} #{alert.track_id}'
-    _label(out, tag, p1[0], max(p1[1], height) + height, (60, 60, 60))
+    # Stack title and tag above the box, or below it near the top edge; never over the object.
+    if p1[1] >= 2 * line:
+        _label(out, alert.title, p1[0], p1[1] - line - 2, color)
+        _label(out, tag, p1[0], p1[1] - 2, (60, 60, 60))
+    else:
+        _label(out, alert.title, p1[0], p2[1] + line + 2, color)
+        _label(out, tag, p1[0], p2[1] + 2 * line + 2, (60, 60, 60))
     return out
 
 
