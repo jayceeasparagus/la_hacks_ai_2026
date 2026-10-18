@@ -13,9 +13,9 @@ backend/data/
 # Person 2's compile cache
 backend/policy/.cache/
 
-# Footage is large; keep the source list, not the videos
-clips/*
-!clips/SOURCES.md
+# Footage: the scenes' clips and tracks are checked in so the demo runs from a clone.
+# Annotated renders are debug output (and wildtrack's is over GitHub's 100 MB limit).
+clips/**/*.annotated.mp4
 
 # Model weights downloaded by ultralytics (it uses the git root as its weights dir)
 weights/

@@ -28,7 +28,9 @@ Used by `backend/vision/test_zones.json`, `python -m vision.evidence_run` and `p
 Download each by hand (Free download, 1080p). `python -m vision.fetch_test_clips` lists what's missing,
 `--open` opens those pages, and `--import <downloads folder>` renames and moves the files into place.
 It never downloads anything itself: Pexels' terms forbid automated downloading (Section 8) and
-redistributing the videos on their own (Section 5), so they stay out of git.
+redistributing the videos on their own (Section 5). On 2026-10-18 the team chose to check in the clips
+the demo scenes use (not the annotated renders) so teammates can run the demo from a clone; the repo is
+public, so revisit that before sharing it widely.
 
 | File | Source | License | Used for |
 | --- | --- | --- | --- |

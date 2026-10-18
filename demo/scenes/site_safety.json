@@ -1,6 +1,6 @@
 {
   "name": "Live policy demo: type a policy, watch it apply",
-  "description": "A busy plaza (WILDTRACK camera 3) plays on a loop as the demo camera. Type a policy on the demo page and it applies at once: each person gets a box and, for gear rules, their checks (hard hat, hi-vis vest); bag bans flag any bag in view. The camera is judged as a whole frame, so there are no zones to draw. Gear checks go to Gemini live, once per person. PolicyLens never identifies who anyone is.",
+  "description": "A busy plaza (WILDTRACK camera 3) plays on a loop as the demo camera. Type a policy on the demo page and it applies at once: each person gets a box and, for gear rules, their checks (hard hat, hi-vis vest); bag bans flag any bag in view. A no-jeans policy checks each person from cached Gemini answers (demo/plaza_verdicts.json). The camera is judged as a whole frame, so there are no zones to draw. Hard-hat and vest checks go to Gemini live, once per person. PolicyLens never identifies who anyone is.",
   "policy": "No backpacks or bags.",
   "cameras": [
     {
@@ -18,6 +18,12 @@
     }
   ],
   "rules": [],
+  "cached_verdicts": {
+    "file": "../plaza_verdicts.json",
+    "cameras": {
+      "cam_plaza": "plaza"
+    }
+  },
   "needs": [],
   "credits": [
     "WILDTRACK dataset, camera 3, trimmed (EPFL CVLab)"

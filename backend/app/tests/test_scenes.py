@@ -163,7 +163,7 @@ class SiteSafetySceneTests(unittest.TestCase):
         self.assertEqual([c.source.split(':', 1)[0] for c in scene.cameras], ['loop'])
         self.assertTrue(whole_frame_cameras(scene.zones))
         self.assertEqual(scene.rules, [])
-        self.assertIsNone(scene.cached_verdicts)  # plaza checks go to the live verifier
+        self.assertEqual(scene.cached_verdicts.cameras, {'cam_plaza': 'plaza'})  # cached jeans answers
 
     def test_cached_verdicts_answer_by_clip_track_and_check(self):
         from app.verdicts import CachedVerdicts
@@ -172,6 +172,12 @@ class SiteSafetySceneTests(unittest.TestCase):
         self.assertIs(cached.get('cam_site', 1, 'safety_vest').answer, True)
         self.assertIs(cached.get('cam_site', 26, 'hard_hat').answer, True)  # short track the engine still checks
         self.assertIsNone(cached.lookup('cam_other'))
+        # A cached "unclear" is replayed; only an entry that recorded an error goes to the live verifier.
+        unclear = CachedVerdicts({'c:1:jeans': {'answer': None, 'confidence': 1.0, 'reason': 'legs hidden'},
+                                  'c:2:jeans': {'answer': None, 'confidence': 0.0, 'reason': 'no verdict', 'error': True}},
+                                 {'cam': 'c'})
+        self.assertEqual(unclear.get('cam', 1, 'jeans').reason, 'legs hidden')
+        self.assertIsNone(unclear.get('cam', 2, 'jeans'))
 
 
 class EvidenceSizeTests(unittest.TestCase):

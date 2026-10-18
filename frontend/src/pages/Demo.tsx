@@ -15,6 +15,7 @@ import { useLive } from '../useLive'
 
 const EXAMPLES = [
   'No backpacks or bags.',
+  'No jeans.',
   'Everyone must wear a hard hat.',
   'Hi-vis vests are required for everyone on the floor.',
 ]

@@ -36,8 +36,7 @@ class SafetyGearTests(unittest.TestCase):
                          'wearing a hard hat (verifier: bare head, no helmet).')
 
     def test_jeans_ban_alerts_when_jeans_are_worn(self):
-        rule = gear_rule('jeans').model_copy(update={'attribute': {'name': 'jeans', 'expected': False}})
-        rule = type(rule).model_validate(rule.model_dump())
+        rule = Rule.model_validate({**gear_rule('jeans').model_dump(), 'attribute': {'name': 'jeans', 'expected': False}})
         verifier = FakeVerifier(verdict(True, 'blue denim jeans'))
         alerts = self.run_rule(rule, verifier)
         self.assertEqual(verifier.calls[0][1], 'jeans')

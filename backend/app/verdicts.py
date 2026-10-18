@@ -7,8 +7,10 @@ the file and which clip each camera plays:
     "cached_verdicts": {"file": "../ppe_verdicts.json",
                         "cameras": {"cam_site": "construction_site", "cam_warehouse": "warehouse"}}
 
-The engine asks the cache first; tracks it doesn't know (or whose cached answer was unclear) go
-to the live verifier as usual. Answers below the verifier's confidence threshold become unclear.
+The engine asks the cache first; tracks it doesn't know, or whose entry records an error, go to
+the live verifier as usual. A cached "unclear" (answer null) is replayed as is, so the demo stays
+deterministic. Answers below the verifier's confidence threshold become unclear.
+Make a cache for a new clip with demo/cache_verdicts.py.
 """
 
 from __future__ import annotations
@@ -43,8 +45,8 @@ class CachedVerdicts:
     def get(self, camera_id: str, track_id: int, check: str) -> Verdict | None:
         clip = self.cameras.get(camera_id)
         entry = self.entries.get(f'{clip}:{track_id}:{check}') if clip else None
-        if not isinstance(entry, dict) or entry.get('answer') is None:
-            return None  # unknown or unclear: let the live verifier look
+        if not isinstance(entry, dict) or entry.get('error'):
+            return None  # unknown, or no real answer was recorded: let the live verifier look
         try:
             verdict = Verdict(answer=entry['answer'], confidence=entry.get('confidence', 0),
                               reason=entry.get('reason') or 'cached verdict')
