@@ -23,7 +23,8 @@ Further contract changes require sign-off under `CLAUDE.md`.
    `duration_seconds`, `severity`; add the display `name` and `enabled` flag needed
    by the frontend. `transparent.expected=true` and `professional.expected=false`.
    Construction-site safety gear: `person` supports `hard_hat` and `safety_vest`
-   (`expected=true`; a violation means the gear is probably missing).
+   (`expected=true`; a violation means the gear is probably missing). Dress code (approved
+   2026-10-18): `person` supports `jeans`; "No jeans" is `expected=false`.
    Person-down and arbitrary exception conditions remain unsupported.
 5. **Verifier:** `Verdict.answer` is strictly `true`, `false`, or `null`.
    Person 2 converts provider `yes/no/unclear` output into these values.
@@ -110,8 +111,8 @@ the persistence mechanism. Slow clients must never block camera workers.
   per-camera models/trackers; `recent_frames(seconds)` supplies evidence frames.
   `crop(frame, bbox, pad=0.15)` accepts the normalized box and converts to pixels.
 - Person 2: `compile_policy(prompt, zones) -> CompileResult` and
-  `verify_crop(crop, check) -> Verdict`; checks are `transparent_bag`, `hard_hat`, `safety_vest` and
-  `professional_camera`.
+  `verify_crop(crop, check) -> Verdict`; checks are `transparent_bag`, `hard_hat`, `safety_vest`, `jeans`
+  and `professional_camera`.
 - Person 4: `RuleEngine(camera_id, zones, rules, ...).update(frame, tf)` returns
   `(list[RuleState], list[Alert])`. Asynchronous completions are polled each update
   and can also be drained when a replay ends. One shared verification scheduler

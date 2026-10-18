@@ -26,7 +26,7 @@ MAX_RULES = 10
 MAX_UNSUPPORTED_CHARS = 300
 
 # Default compliant value when the model leaves attribute_expected empty.
-DEFAULT_EXPECTED = {"transparent": True, "professional": False, "hard_hat": True, "safety_vest": True}
+DEFAULT_EXPECTED = {"transparent": True, "professional": False, "hard_hat": True, "safety_vest": True, "jeans": False}
 
 # (id, name) for object_attribute rules, by attribute.
 ATTRIBUTE_PURPOSES = {
@@ -34,6 +34,7 @@ ATTRIBUTE_PURPOSES = {
     "professional": ("pro_camera", "Camera policy"),
     "hard_hat": ("hard_hat", "Hard-hat policy"),
     "safety_vest": ("safety_vest", "Safety-vest policy"),
+    "jeans": ("jeans", "Jeans policy"),  # not "no_jeans": the no_ prefix marks object bans
 }
 
 _DURATION_NOTE = re.compile(r"\b(duration|time limit|how long)\b", re.IGNORECASE)

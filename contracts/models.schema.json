@@ -86,7 +86,8 @@
               "transparent",
               "professional",
               "hard_hat",
-              "safety_vest"
+              "safety_vest",
+              "jeans"
             ],
             "title": "Name",
             "type": "string"
@@ -198,7 +199,8 @@
               "transparent",
               "professional",
               "hard_hat",
-              "safety_vest"
+              "safety_vest",
+              "jeans"
             ],
             "title": "Name",
             "type": "string"
@@ -526,7 +528,8 @@
               "transparent",
               "professional",
               "hard_hat",
-              "safety_vest"
+              "safety_vest",
+              "jeans"
             ],
             "title": "Name",
             "type": "string"

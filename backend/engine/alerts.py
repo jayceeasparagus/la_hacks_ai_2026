@@ -10,9 +10,10 @@ ATTRIBUTE_TERMS = {
     'professional': ('professional camera', 'a professional-style camera'),
     'hard_hat': ('hard hat', 'wearing a hard hat'),
     'safety_vest': ('safety vest', 'wearing a safety vest'),
+    'jeans': ('jeans', 'wearing jeans'),
 }
 # Safety gear a person should wear: a violation means the gear is probably missing.
-WEARABLE = {'hard_hat', 'safety_vest'}
+WEARABLE = {'hard_hat', 'safety_vest', 'jeans'}
 
 
 def utc_now() -> str:
@@ -66,7 +67,7 @@ def obstruction_alert(*, incident_id: str, camera_id: str, rule: Rule,
         elapsed=elapsed, confidence=confidence, created_at=created_at,
         title=title,
         observation=(f'{_article(track.object_class)} {track.object_class} was observed'
-                     f'{_in_zone(zone_name) or " in view"} for {elapsed:.1f} seconds, '
+                     f'{f" inside the {zone_name} zone" if zone_name else " in view"} for {elapsed:.1f} seconds, '
                      'allowing brief detection gaps.'),
     )
 
@@ -78,6 +79,7 @@ def attribute_alert(*, incident_id: str, camera_id: str, rule: Rule, track: Trac
     noun, phrase = ATTRIBUTE_TERMS[rule.attribute.name]
     looks = 'looks like' if verdict.answer else 'is probably not'
     if rule.attribute.name in WEARABLE:
+        looks = 'is probably' if verdict.answer else 'is probably not'  # "is probably wearing jeans"
         title = f'Possible {noun} worn' if verdict.answer else f'Possible missing {noun}'
     else:
         title = f'Possible {noun}' if verdict.answer else f'Possible non-{noun}'

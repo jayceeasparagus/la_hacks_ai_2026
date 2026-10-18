@@ -186,6 +186,11 @@ PPE_ON = """\
   attribute_expected true, severity "review". "Safety gear" or "PPE" means both: one rule per attribute.
   Words like "workers", "everyone" or "employees" only say who the rule covers; that is not an identity
   request. Other gear (gloves, goggles, boots, masks, harnesses) cannot be checked: put it in unsupported.
+- Dress code attribute for person:
+    jeans: is the person wearing jeans (denim trousers)?
+  "No jeans" or "Jeans are not allowed" -> object_attribute, objects ["person"], attribute_name "jeans",
+  attribute_expected false, severity "review". "Jeans required" -> attribute_expected true. Other clothing
+  (shorts, skirts, hats, colors) cannot be checked: put it in unsupported.
 """
 
 PPE_SHOT = (

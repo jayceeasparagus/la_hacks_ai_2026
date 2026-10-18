@@ -31,7 +31,7 @@ PHASE_COLOR = {'timing': (0, 170, 255), 'verifying': (255, 170, 0), 'alerted': (
                'compliant': (90, 220, 90), 'cleared': (160, 160, 160)}
 # Attribute checks drawn per object. Neutral words only: a check reports what was seen.
 CHECK_LABEL = {'hard_hat': 'Hard hat', 'safety_vest': 'Hi-vis vest', 'transparent': 'Clear bag',
-               'professional': 'Pro camera'}
+               'professional': 'Pro camera', 'jeans': 'Jeans'}
 CHECK_WORDS = {'hard_hat': ('not seen', 'yes'), 'safety_vest': ('not seen', 'yes')}  # (no, yes)
 CHECK_COLOR = {'ok': (70, 160, 40), 'missing': (0, 140, 235), 'unclear': (120, 120, 120),
                'pending': (120, 120, 120)}

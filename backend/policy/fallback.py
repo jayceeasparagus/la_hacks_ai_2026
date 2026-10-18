@@ -10,13 +10,13 @@ import re
 from policy.contracts import Zone
 from policy.draft import UNKNOWN_ZONE, DraftPolicy, DraftRule
 from policy.synonyms import (
-    ALL_PPE, BAGS, GENERIC_UNSUPPORTED, HARD_HAT, PERSON_DOWN, PERSON_PROHIBITION_UNSUPPORTED, PROHIBITION, SAFETY_VEST,
+    ALL_PPE, BAGS, GENERIC_UNSUPPORTED, HARD_HAT, JEANS, JEANS_REQUIRED, PERSON_DOWN, PERSON_PROHIBITION_UNSUPPORTED, PROHIBITION, SAFETY_VEST,
     WEAR_REQUIREMENT, classify_unsupported_topic, is_prohibition, objects_in_text, parse_duration, zones_mentioned,
     zones_named_in,
 )
 
 # Unsupported topics worth reporting even inside a sentence that also produced a rule.
-STANDALONE_TOPICS = {"injection", "concealed", "weapon", "other_ppe"}
+STANDALONE_TOPICS = {"injection", "concealed", "weapon", "other_ppe", "other_clothing"}
 
 log = logging.getLogger("policylens.policy")
 
@@ -76,6 +76,11 @@ def compile_fallback(prompt: str, zones: list[Zone]) -> DraftPolicy | None:
                 found += [_attribute_rule(clause, ["person"], z, "hard_hat", True) for z in attribute_zones]
             if everything or SAFETY_VEST.search(low):
                 found += [_attribute_rule(clause, ["person"], z, "safety_vest", True) for z in attribute_zones]
+
+        # Dress code: "No jeans" -> expected false; "Jeans required" -> expected true.
+        if JEANS.search(low):
+            required = bool(JEANS_REQUIRED.search(low)) and not re.search(r"\b(?:no|not|never|banned)\b", low)
+            found += [_attribute_rule(clause, ["person"], z, "jeans", required) for z in attribute_zones]
 
         if EXIT.search(low) and KEEP_CLEAR.search(low):
             # Only people mentioned ("clear of people") -> keep them, so capability warns and drops the rule.

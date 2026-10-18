@@ -20,6 +20,8 @@ def describe_rule(rule: Rule, zones: list[Zone]) -> str:
     if rule.type == "object_attribute" and rule.attribute is not None:
         if rule.attribute.name == "transparent":
             return f"{noun} is probably {'opaque' if rule.attribute.expected else 'transparent'}"
+        if rule.attribute.name == "jeans":
+            return "Person probably not wearing jeans" if rule.attribute.expected else "Person probably wearing jeans"
         if rule.attribute.name in PPE_WORDS:
             gear = PPE_WORDS[rule.attribute.name]
             return f"Person probably without {gear}" if rule.attribute.expected else f"Person wearing {gear}"

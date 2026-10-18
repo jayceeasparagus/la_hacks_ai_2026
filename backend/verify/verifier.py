@@ -30,7 +30,7 @@ def timeout_s() -> float:
         return TIMEOUT_S
     return value if value > 0 else TIMEOUT_S
 
-Check = Literal["transparent_bag", "professional_camera", "hard_hat", "safety_vest", "person_down"]
+Check = Literal["transparent_bag", "professional_camera", "hard_hat", "safety_vest", "jeans", "person_down"]
 
 MIN_SIDE_PX = 40
 MAX_SIDE_PX = 512
@@ -147,6 +147,10 @@ def _fake_answer(crop: np.ndarray, check: str) -> VisionAnswer:
         answer = "yes" if region_brightness >= 128 else "no"
         return VisionAnswer(answer=answer, confidence=0.9,
                             reason=f"offline fake verdict (region brightness {region_brightness:.0f})")
+    if check == "jeans":
+        legs = float(crop[height // 2:].mean()) if height > 1 else brightness
+        answer = "yes" if legs < 100 else "no"
+        return VisionAnswer(answer=answer, confidence=0.9, reason=f"offline fake verdict (legs brightness {legs:.0f})")
     if check == "person_down":
         height, width = crop.shape[:2]
         answer = "yes" if width > 1.2 * height else "no"

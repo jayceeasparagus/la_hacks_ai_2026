@@ -3,7 +3,7 @@
 
 export type Severity = 'review' | 'urgent'
 export type RuleType = 'object_attribute' | 'persistent_object'
-export type AttributeName = 'transparent' | 'professional' | 'hard_hat' | 'safety_vest'
+export type AttributeName = 'transparent' | 'professional' | 'hard_hat' | 'safety_vest' | 'jeans'
 export type BBox = [number, number, number, number] // x1, y1, x2, y2 normalized 0..1
 
 export interface Camera {

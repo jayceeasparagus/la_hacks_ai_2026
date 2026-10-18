@@ -35,6 +35,13 @@ usually with reflective stripes) on their torso?
   that is carried rather than worn.
 - Answer "unclear" if there is no person, their torso is hidden, or the image is too blurry or dark.
 Give a confidence from 0 to 1 and a short reason.""",
+    "jeans": """\
+This is a cropped frame from a public-space camera. Look at the main person in the image.
+Is this person wearing jeans (denim trousers, in any color or fit)?
+- Answer "yes" for jeans or other denim trousers, including black, grey or ripped denim.
+- Answer "no" for other trousers, joggers, leggings, shorts, skirts or dresses.
+- Answer "unclear" if there is no person, their legs are hidden or cut off, or the image is too blurry or dark.
+Give a confidence from 0 to 1 and a short reason.""",
     # Stretch goal: only used once the contracts support a lying_down attribute.
     "person_down": """\
 This is a cropped frame from a venue camera. Look at the main person in the image.
@@ -53,5 +60,6 @@ CHECK_FOR_ATTRIBUTE = {
     "professional": "professional_camera",
     "hard_hat": "hard_hat",
     "safety_vest": "safety_vest",
+    "jeans": "jeans",
     "lying_down": "person_down",
 }

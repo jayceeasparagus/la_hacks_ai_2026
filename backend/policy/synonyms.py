@@ -185,6 +185,12 @@ SAFETY_VEST = re.compile(
     r"\b(?:(?:safety |reflective |hi-?vis |high[- ]vis(?:ibility)? )?vests?|hi-?vis|high[- ]vis(?:ibility)?)\b"
 )
 ALL_PPE = re.compile(r"\b(?:ppe|safety (?:gear|wear|equipment|clothing)|protective (?:gear|equipment|wear|clothing))\b")
+# Dress code: "No jeans", "Jeans are not allowed" (expected false), "Jeans required" (expected true).
+JEANS = re.compile(r"\b(?:jeans|denim)\b")
+JEANS_REQUIRED = re.compile(
+    r"\b(?:must|need\w*|requir\w*|has to|have to|only)\b[^.;]{0,20}\b(?:jeans|denim)\b"
+    r"|\b(?:jeans|denim)\b[^.;]{0,20}\b(?:required|mandatory)\b"
+)
 WEAR_REQUIREMENT = re.compile(r"\b(?:wear\w*|must|need\w*|requir\w*|without|has to|have to|put on|no)\b")
 
 
@@ -220,6 +226,10 @@ UNSUPPORTED_TOPICS: list[tuple[str, re.Pattern, str]] = [
                 r"|respirators?|masks?|face shields?)\b"),
      "I can't reliably check gloves, goggles, boots, masks or harnesses yet. I can check hard hats and safety "
      "vests on people in the zones you've drawn."),
+    ("other_clothing",
+     re.compile(r"\b(?:shorts|skirts?|dresses|(?<!hard )hats?|caps?|hoodies?|t-shirts?|shirts?|sandals|flip[- ]flops|sneakers)\b"),
+     "I can't check clothing other than jeans yet, like shorts, skirts or hats. I can check jeans, hard hats "
+     "and hi-vis vests on people."),
     ("identity",
      re.compile(r"\b(?:staff|employees?|vips?|identify|identity|identities|recogni[sz]\w*|faces?|who (?:is|are)"
                 r"|specific (?:people|person|individuals?)|security guards?|members? only)\b"),
