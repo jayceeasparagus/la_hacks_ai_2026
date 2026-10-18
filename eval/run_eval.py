@@ -136,7 +136,12 @@ def main() -> None:
 
     with args.cases.open(newline='', encoding='utf-8') as stream:
         rows = [r for r in csv.DictReader(stream) if r['case'] and not r['case'].startswith('#')]
-    results = [run_case(row, args.cases.parent) for row in rows]
+    missing = [row for row in rows if not _source_path(row, args.cases.parent).exists()]
+    for row in missing:
+        print(f"skipped {row['case']}: {row['source']} not found (footage isn't in git; see clips/SOURCES.md)")
+    results = [run_case(row, args.cases.parent) for row in rows if row not in missing]
+    if not results:
+        raise SystemExit('no cases to run')
 
     header = ('case', 'expected', 'alerts', 'correct', 'false', 'missed', 'duplicates', 'manual_review', 'latency_s')
     widths = [max(len(h), *(len(_fmt(r[h])) for r in results)) for h in header]
@@ -152,6 +157,10 @@ def main() -> None:
           f"{totals['false']} false, {totals['missed']} missed, {totals['duplicates']} duplicate")
     if args.json:
         args.json.write_text(json.dumps(results, indent=2), encoding='utf-8')
+
+
+def _source_path(row: dict, base: Path) -> Path:
+    return base / row['source'].partition(':')[2]
 
 
 def _fmt(value) -> str:
