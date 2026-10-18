@@ -1,2 +1,4 @@
-# First increment; install into a Python 3.11+ virtual environment.
+# Install into a Python 3.11+ virtual environment.
 pydantic>=2,<3
+numpy>=2,<3
+opencv-python>=4.8,<6

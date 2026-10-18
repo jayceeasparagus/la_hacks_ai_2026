@@ -48,6 +48,8 @@ def replay(frames, zones=None, rules=None):
         except ValueError as exc:
             raise ValueError(f'{tf.camera_id} at {tf.ts}s: {exc}') from exc
         alerts.extend(new_alerts)
+    for engine in engines.values():
+        alerts.extend(engine.drain_verifications())
     return alerts
 
 

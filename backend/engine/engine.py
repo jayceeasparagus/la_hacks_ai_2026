@@ -1,11 +1,14 @@
 """Camera-local temporal rule engine. All timing uses source timestamps."""
 
 from dataclasses import dataclass
+import time
 from typing import Callable
 from uuid import uuid4
 
 from app.models import Alert, Rule, RuleState, Track, TrackFrame, Zone
-from engine.alerts import obstruction_alert, utc_now
+from engine.alerts import attribute_alert, obstruction_alert, utc_now
+from engine.images import ImageSample, best_sample
+from engine.verification import Ticket, VerificationScheduler, default_scheduler, unavailable
 from engine.zones import bbox_in_zone, validate_polygon
 
 
@@ -27,10 +30,25 @@ class _Incident:
     alerted: bool = False
     confidence_sum: float = 0
     observations: int = 0
+    original_track_id: int = 0
+    phase: str = 'timing'
+    best: ImageSample | None = None
+
+
+@dataclass
+class _Check:
+    incident_id: str
+    rule: Rule
+    track: Track
+    sample: ImageSample | None
+    ts: float
+    elapsed: float
+    created_at: str
+    ticket: Ticket | None
 
 
 class RuleEngine:
-    """Persistent-object checkpoint; attribute rules are explicitly unavailable.
+    """Temporal rules and nonblocking visual-attribute verification.
 
     Each instance belongs to one camera session and is updated by one worker.
     Configuration is copied so editing a caller's models cannot mutate a live rule.
@@ -38,7 +56,8 @@ class RuleEngine:
 
     def __init__(self, camera_id: str, zones: list[Zone], rules: list[Rule], *,
                  session_id: str | None = None,
-                 clock: Callable[[], str] = utc_now):
+                 clock: Callable[[], str] = utc_now,
+                 scheduler: VerificationScheduler | None = None):
         if not camera_id:
             raise ValueError('camera_id is required')
         if len({zone.id for zone in zones}) != len(zones):
@@ -55,17 +74,24 @@ class RuleEngine:
                 raise ValueError(f'Unknown zone: {rule.zone}')
             if not rule.enabled or self.zones[rule.zone].camera_id != camera_id:
                 continue
-            if rule.type != 'persistent_object':
-                raise NotImplementedError('Attribute verification is the next increment')
             self.rules.append(rule.model_copy(deep=True))
         self.clock = clock
         self.session_id = session_id or uuid4().hex
         self._incidents: dict[tuple[str, int], _Incident] = {}
         self._sequence = 0
         self._last_ts: float | None = None
+        self.scheduler = scheduler
+        if any(rule.type == 'object_attribute' for rule in self.rules) and scheduler is None:
+            self.scheduler = default_scheduler()
+        self._checks: dict[str, _Check] = {}
+        self._track_tickets: dict[tuple[str, int], Ticket] = {}
 
     def reset(self) -> None:
         """Start a new session; old incident IDs can never collide with new ones."""
+        if self.scheduler is not None:
+            self.scheduler.cancel_session(self.camera_id, self.session_id)
+        self._checks.clear()
+        self._track_tickets.clear()
         self._incidents.clear()
         self._sequence = 0
         self._last_ts = None
@@ -75,7 +101,7 @@ class RuleEngine:
         self._sequence += 1
         return _Incident(
             id=f'{self.camera_id}:{self.session_id}:{rule.id}:{self._sequence}',
-            track=track, entered=ts, last_seen=ts,
+            track=track, entered=ts, last_seen=ts, original_track_id=track.track_id,
         )
 
     def _state(self, rule: Rule, incident: _Incident, ts: float, phase: str) -> RuleState:
@@ -146,28 +172,34 @@ class RuleEngine:
                 if incident is None:
                     incident = self._new_incident(rule, track, tf.ts)
                     self._incidents[key] = incident
-                if not incident.alerted and (
+                if incident.phase == 'timing' and not incident.alerted and (
                         incident.entered is None
                         or tf.ts - incident.last_seen > 1.0 + 1e-9):
                     incident.entered = tf.ts
                     incident.confidence_sum = 0
                     incident.observations = 0
+                    incident.best = None
                 incident.track = track
                 incident.last_seen = tf.ts
                 incident.outside_since = None
                 incident.confidence_sum += track.confidence
                 incident.observations += 1
                 elapsed = tf.ts - incident.entered
-                if not incident.alerted and elapsed >= rule.duration_seconds - 1e-9:
+                if rule.type == 'object_attribute':
+                    if incident.phase == 'timing':
+                        incident.best = best_sample(incident.best, frame, track, tf.ts)
+                        if elapsed >= rule.duration_seconds - 1e-9:
+                            self._submit_check(rule, incident, tf.ts, elapsed)
+                elif not incident.alerted and elapsed >= rule.duration_seconds - 1e-9:
                     incident.alerted = True
+                    incident.phase = 'alerted'
                     alerts.append(obstruction_alert(
                         incident_id=incident.id, camera_id=self.camera_id, rule=rule,
                         track=track, ts=tf.ts, elapsed=elapsed,
                         confidence=incident.confidence_sum / incident.observations,
                         zone_name=zone.name, created_at=self.clock(),
                     ))
-                states.append(self._state(rule, incident, tf.ts,
-                                          'alerted' if incident.alerted else 'timing'))
+                states.append(self._state(rule, incident, tf.ts, incident.phase))
 
             for key, incident in self._incidents.items():
                 if key[0] != rule.id or key[1] in inside:
@@ -175,16 +207,80 @@ class RuleEngine:
                 if key[1] in all_tracks:
                     if incident.outside_since is None:
                         incident.outside_since = tf.ts
-                    if not incident.alerted:
+                    if incident.phase == 'timing' and not incident.alerted:
                         incident.entered = None
                         incident.confidence_sum = 0
                         incident.observations = 0
+                        incident.best = None
                 elif (incident.outside_since is None
                       and tf.ts - incident.last_seen <= 1.0 + 1e-9):
-                    states.append(self._state(rule, incident, tf.ts,
-                                              'alerted' if incident.alerted else 'timing'))
-                elif not incident.alerted:
+                    states.append(self._state(rule, incident, tf.ts, incident.phase))
+                elif incident.phase == 'timing' and not incident.alerted:
                     incident.entered = None
                     incident.confidence_sum = 0
                     incident.observations = 0
+                    incident.best = None
+        alerts.extend(self.poll_verifications())
+        current = {incident.id: incident for incident in self._incidents.values()}
+        for state in states:
+            if state.phase != 'cleared' and state.incident_id in current:
+                state.phase = current[state.incident_id].phase
         return states, alerts
+
+    def _submit_check(self, rule: Rule, incident: _Incident, ts: float, elapsed: float):
+        check = 'transparent_bag' if rule.attribute.name == 'transparent' else 'professional_camera'
+        key = (check, incident.original_track_id)
+        ticket = self._track_tickets.get(key)
+        if incident.best is not None and ticket is None:
+            try:
+                ticket = self.scheduler.submit(
+                    (self.camera_id, self.session_id, check, incident.original_track_id),
+                    incident.best.crop, check)
+            except RuntimeError:
+                # A closed scheduler is handled as unavailable, not a frame-loop crash.
+                ticket = None
+                incident.best = None
+            if ticket is None and incident.best is not None:
+                return  # queue full: retry without blocking, retaining the best crop
+            if ticket is not None:
+                self._track_tickets[key] = ticket
+        incident.phase = 'verifying'
+        self._checks[incident.id] = _Check(
+            incident.id, rule, (incident.best.track if incident.best else incident.track),
+            incident.best, ts, elapsed, self.clock(), ticket)
+
+    def poll_verifications(self) -> list[Alert]:
+        """Collect results even when video is paused; does not advance source time."""
+        alerts = []
+        for incident_id, check in list(self._checks.items()):
+            verdict = (self.scheduler.poll(check.ticket) if check.ticket is not None
+                       else unavailable('no usable crop or verification worker unavailable'))
+            if verdict is None:
+                continue
+            del self._checks[incident_id]
+            active = next((incident for incident in self._incidents.values()
+                           if incident.id == incident_id), None)
+            violation = verdict.answer is None or verdict.answer != check.rule.attribute.expected
+            if active is not None:
+                active.phase = 'alerted' if violation else 'compliant'
+                active.alerted = violation
+                active.best = None
+            if violation:
+                alerts.append(attribute_alert(
+                    incident_id=incident_id, camera_id=self.camera_id, rule=check.rule,
+                    track=check.track, verdict=verdict, ts=check.ts, elapsed=check.elapsed,
+                    created_at=check.created_at))
+        return alerts
+
+    def drain_verifications(self, timeout=5) -> list[Alert]:
+        """Blocking replay/shutdown helper; never call from a live frame loop."""
+        deadline = time.monotonic() + timeout
+        alerts = []
+        while self._checks:
+            alerts.extend(self.poll_verifications())
+            if not self._checks:
+                break
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Verification drain timed out')
+            time.sleep(0.002)
+        return alerts
