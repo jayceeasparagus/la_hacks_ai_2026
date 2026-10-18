@@ -40,6 +40,15 @@ def explain(error: Exception) -> str:
     if 'gemini_api_key is not set' in low or 'no api key' in low:
         return ('No key found. Copy .env.example to .env at the repo root and set GEMINI_API_KEY '
                 '(AI Studio key) or, for Vertex AI, GOOGLE_GENAI_USE_VERTEXAI=true plus GOOGLE_API_KEY.')
+    if 'api_key_service_blocked' in low:
+        return ('This key\'s API restrictions block the Gemini API (generativelanguage.googleapis.com). In Google Cloud '
+                'console > APIs & Services > Credentials > this key > API restrictions, add "Generative Language API" '
+                '(or choose "Don\'t restrict key"), make sure that API is enabled for the project, wait a few '
+                'minutes, and run this check again. Or create a key at https://aistudio.google.com/apikey.')
+    if 'api keys are not supported by this api' in low or 'credentials_missing' in low:
+        return ('Vertex AI refused the key: it is not a Vertex AI express-mode key. Use it in Gemini API mode '
+                '(remove GOOGLE_GENAI_USE_VERTEXAI), create an express key in Vertex AI Studio, or use '
+                'gcloud auth application-default login with GOOGLE_CLOUD_PROJECT.')
     if 'api key not valid' in low or 'api_key_invalid' in low:
         return ('The key was rejected. Check it was copied fully. A Vertex AI key needs '
                 'GOOGLE_GENAI_USE_VERTEXAI=true; an AI Studio key must not have it set.')
