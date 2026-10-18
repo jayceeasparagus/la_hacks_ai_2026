@@ -1,0 +1,14 @@
+case,source,config,rule_id,expected_alerts,window_start_s,window_end_s
+exit_bag,tracks:generated/exit_bag.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
+walkthrough,tracks:generated/walkthrough.tracks.jsonl,synthetic,blocked_exit,0,0,0
+short_bag,tracks:generated/short_bag.tracks.jsonl,synthetic,blocked_exit,0,0,0
+two_bags,tracks:generated/two_bags.tracks.jsonl,synthetic,blocked_exit,2,5.0,5.5
+dropout,tracks:generated/dropout.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
+id_switch,tracks:generated/id_switch.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
+reentry,tracks:generated/reentry.tracks.jsonl,synthetic,blocked_exit,2,5.0,16.5
+chair,tracks:generated/chair.tracks.jsonl,synthetic,blocked_exit,1,5.0,5.5
+# Real clips go below once recorded; config points at a JSON with the zones drawn for that clip.
+# exit_bag_real,clip:../clips/exit_bag.mp4,configs/exit.json,blocked_exit,1,8.0,9.0
+# opaque_bag_entrance,clip:../clips/opaque_bag.mp4,configs/entrance.json,clear_bag,1,2.0,6.0
+# clear_bag_entrance,clip:../clips/clear_bag.mp4,configs/entrance.json,clear_bag,0,0,0
+# no_hard_hat_site,clip:../clips/site_no_helmet.mp4,configs/site.json,hard_hat,1,1.0,5.0

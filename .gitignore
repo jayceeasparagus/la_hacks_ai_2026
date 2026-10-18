@@ -1,0 +1,23 @@
+# Secrets and environments
+.env
+.venv/
+backend/.venv/
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime data: settings, alerts.db and evidence written by the server
+backend/data/
+# Person 2's compile cache
+backend/policy/.cache/
+
+# Footage is large; keep the source list, not the videos
+clips/*
+!clips/SOURCES.md
+
+# Agent worktrees and OS metadata
+.claude/worktrees/
+.DS_Store
+Thumbs.db
