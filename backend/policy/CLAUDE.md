@@ -32,6 +32,13 @@ Never change the contracts from here. The approved contract differs from the ori
   still retry once, because the Interactions client maps attempts straight to max_retries. We also
   enforce our own wall-clock timeout with `future.result(timeout=...)`.
 - Schemas go through `draft.structured_output_schema()`, which inlines `$ref`s and drops titles and defaults.
+- **Vertex AI does not serve the Interactions API**: in Vertex mode the SDK posts to
+  `/v1beta1/interactions` and Google returns 404 (checked 2026-10-17). So with
+  `GOOGLE_GENAI_USE_VERTEXAI=true`, `llm.py` uses `models.generate_content` with `response_json_schema`,
+  `system_instruction`, image `Part.from_bytes` and `thinking_budget=0` for the verifier. The default
+  model there is `gemini-2.5-flash`, because Vertex has no `-latest` aliases. Express-mode keys
+  (`GOOGLE_API_KEY`) build `genai.Client(vertexai=True, api_key=...)`. With a fake key the Vertex
+  path reaches auth (401), so the route is right. Run `python -m policy.check_gemini` to test a real setup.
 - NOT yet checked against the live API, because there's no key yet: whether the server accepts these
   schemas, and real latency. Run `pytest -m live` once `.env` has `GEMINI_API_KEY`.
 
