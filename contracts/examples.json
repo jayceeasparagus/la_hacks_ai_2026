@@ -1,0 +1,295 @@
+{
+  "cameras": [
+    {
+      "id": "cam_entrance",
+      "name": "Main entrance",
+      "source": "webcam:0"
+    },
+    {
+      "id": "cam_exit",
+      "name": "Emergency exit",
+      "source": "webcam:1"
+    }
+  ],
+  "zones": [
+    {
+      "id": "main_entrance",
+      "camera_id": "cam_entrance",
+      "name": "Main entrance",
+      "polygon": [
+        [
+          0.2,
+          0.2
+        ],
+        [
+          0.8,
+          0.2
+        ],
+        [
+          0.8,
+          0.9
+        ],
+        [
+          0.2,
+          0.9
+        ]
+      ]
+    },
+    {
+      "id": "emergency_exit",
+      "camera_id": "cam_exit",
+      "name": "Emergency exit",
+      "polygon": [
+        [
+          0.2,
+          0.2
+        ],
+        [
+          0.8,
+          0.2
+        ],
+        [
+          0.8,
+          0.9
+        ],
+        [
+          0.2,
+          0.9
+        ]
+      ]
+    }
+  ],
+  "compile_result": {
+    "rules": [
+      {
+        "id": "clear_bag",
+        "name": "Clear-bag policy",
+        "type": "object_attribute",
+        "objects": [
+          "backpack",
+          "handbag",
+          "suitcase"
+        ],
+        "zone": "main_entrance",
+        "attribute": {
+          "name": "transparent",
+          "expected": true
+        },
+        "duration_seconds": 1.0,
+        "severity": "review",
+        "enabled": true
+      },
+      {
+        "id": "pro_camera",
+        "name": "Camera policy",
+        "type": "object_attribute",
+        "objects": [
+          "camera"
+        ],
+        "zone": "main_entrance",
+        "attribute": {
+          "name": "professional",
+          "expected": false
+        },
+        "duration_seconds": 1.0,
+        "severity": "review",
+        "enabled": true
+      },
+      {
+        "id": "blocked_exit",
+        "name": "Exit obstruction",
+        "type": "persistent_object",
+        "objects": [
+          "backpack",
+          "handbag",
+          "suitcase",
+          "chair"
+        ],
+        "zone": "emergency_exit",
+        "attribute": null,
+        "duration_seconds": 5.0,
+        "severity": "urgent",
+        "enabled": true
+      }
+    ],
+    "warnings": [],
+    "unsupported": []
+  },
+  "rules": [
+    {
+      "id": "clear_bag",
+      "name": "Clear-bag policy",
+      "type": "object_attribute",
+      "objects": [
+        "backpack",
+        "handbag",
+        "suitcase"
+      ],
+      "zone": "main_entrance",
+      "attribute": {
+        "name": "transparent",
+        "expected": true
+      },
+      "duration_seconds": 1.0,
+      "severity": "review",
+      "enabled": true
+    },
+    {
+      "id": "pro_camera",
+      "name": "Camera policy",
+      "type": "object_attribute",
+      "objects": [
+        "camera"
+      ],
+      "zone": "main_entrance",
+      "attribute": {
+        "name": "professional",
+        "expected": false
+      },
+      "duration_seconds": 1.0,
+      "severity": "review",
+      "enabled": true
+    },
+    {
+      "id": "blocked_exit",
+      "name": "Exit obstruction",
+      "type": "persistent_object",
+      "objects": [
+        "backpack",
+        "handbag",
+        "suitcase",
+        "chair"
+      ],
+      "zone": "emergency_exit",
+      "attribute": null,
+      "duration_seconds": 5.0,
+      "severity": "urgent",
+      "enabled": true
+    }
+  ],
+  "track_frame": {
+    "camera_id": "cam_exit",
+    "ts": 5.4,
+    "tracks": [
+      {
+        "track_id": 12,
+        "object_class": "backpack",
+        "bbox": [
+          0.3,
+          0.3,
+          0.5,
+          0.7
+        ],
+        "confidence": 0.95
+      }
+    ]
+  },
+  "verdict": {
+    "answer": null,
+    "confidence": 0.0,
+    "reason": "Bag is obscured"
+  },
+  "rule_state": {
+    "camera_id": "cam_exit",
+    "rule_id": "blocked_exit",
+    "track_id": 12,
+    "incident_id": "example-incident",
+    "ts": 5.4,
+    "elapsed_seconds": 5.4,
+    "duration_seconds": 5.0,
+    "phase": "alerted"
+  },
+  "alert": {
+    "id": "example-incident:alert",
+    "incident_id": "example-incident",
+    "camera_id": "cam_exit",
+    "rule_id": "blocked_exit",
+    "rule_name": "Exit obstruction",
+    "zone_id": "emergency_exit",
+    "track_id": 12,
+    "object_class": "backpack",
+    "bbox": [
+      0.3,
+      0.3,
+      0.5,
+      0.7
+    ],
+    "ts": 5.4,
+    "created_at": "2026-10-17T00:00:00Z",
+    "elapsed_seconds": 5.4,
+    "severity": "urgent",
+    "title": "Possible exit obstruction",
+    "observation": "A backpack was observed inside the Emergency exit zone for 5.4 seconds, allowing brief detection gaps.",
+    "confidence": 0.95,
+    "rule_snapshot": {
+      "id": "blocked_exit",
+      "name": "Exit obstruction",
+      "type": "persistent_object",
+      "objects": [
+        "backpack",
+        "handbag",
+        "suitcase",
+        "chair"
+      ],
+      "zone": "emergency_exit",
+      "attribute": null,
+      "duration_seconds": 5.0,
+      "severity": "urgent",
+      "enabled": true
+    },
+    "evidence_status": "unavailable",
+    "evidence_image_url": null,
+    "evidence_clip_url": null,
+    "status": "open",
+    "decision": null,
+    "decided_at": null
+  },
+  "ws_alert": {
+    "type": "alert",
+    "data": {
+      "id": "example-incident:alert",
+      "incident_id": "example-incident",
+      "camera_id": "cam_exit",
+      "rule_id": "blocked_exit",
+      "rule_name": "Exit obstruction",
+      "zone_id": "emergency_exit",
+      "track_id": 12,
+      "object_class": "backpack",
+      "bbox": [
+        0.3,
+        0.3,
+        0.5,
+        0.7
+      ],
+      "ts": 5.4,
+      "created_at": "2026-10-17T00:00:00Z",
+      "elapsed_seconds": 5.4,
+      "severity": "urgent",
+      "title": "Possible exit obstruction",
+      "observation": "A backpack was observed inside the Emergency exit zone for 5.4 seconds, allowing brief detection gaps.",
+      "confidence": 0.95,
+      "rule_snapshot": {
+        "id": "blocked_exit",
+        "name": "Exit obstruction",
+        "type": "persistent_object",
+        "objects": [
+          "backpack",
+          "handbag",
+          "suitcase",
+          "chair"
+        ],
+        "zone": "emergency_exit",
+        "attribute": null,
+        "duration_seconds": 5.0,
+        "severity": "urgent",
+        "enabled": true
+      },
+      "evidence_status": "unavailable",
+      "evidence_image_url": null,
+      "evidence_clip_url": null,
+      "status": "open",
+      "decision": null,
+      "decided_at": null
+    }
+  }
+}
