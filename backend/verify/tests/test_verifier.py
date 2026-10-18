@@ -69,6 +69,17 @@ def test_fake_person_down_uses_box_shape():
     assert verify_crop(np.zeros((200, 80, 3), np.uint8), "person_down").answer is False
 
 
+def test_fake_ppe_uses_regions():
+    helmet = np.zeros((200, 80, 3), np.uint8)
+    helmet[:50] = 230  # bright top quarter
+    assert verify_crop(helmet, "hard_hat").answer is True
+    assert verify_crop(helmet, "safety_vest").answer is False
+    vest = np.zeros((200, 80, 3), np.uint8)
+    vest[50:150] = 230  # bright middle half
+    assert verify_crop(vest, "safety_vest").answer is True
+    assert verify_crop(vest, "hard_hat").answer is False
+
+
 def test_every_attribute_has_a_check():
     from verify.prompts import CHECK_FOR_ATTRIBUTE, QUESTIONS
 

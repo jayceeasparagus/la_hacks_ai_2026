@@ -19,7 +19,15 @@ MAX_RULES = 10
 MAX_UNSUPPORTED_CHARS = 300
 
 # Default compliant value when the model leaves attribute_expected empty.
-DEFAULT_EXPECTED = {"transparent": True, "professional": False}
+DEFAULT_EXPECTED = {"transparent": True, "professional": False, "hard_hat": True, "safety_vest": True}
+
+# (id, name) for object_attribute rules, by attribute.
+ATTRIBUTE_PURPOSES = {
+    "transparent": ("clear_bag", "Clear-bag policy"),
+    "professional": ("pro_camera", "Camera policy"),
+    "hard_hat": ("hard_hat", "Hard-hat policy"),
+    "safety_vest": ("safety_vest", "Safety-vest policy"),
+}
 
 _DURATION_NOTE = re.compile(r"\b(duration|time limit|how long)\b", re.IGNORECASE)
 _BIG_CAMERA_WORDS = re.compile(r"\b(professional|pro|dslrs?|big|large|video|cinema|broadcast)\b", re.IGNORECASE)
@@ -210,9 +218,7 @@ def _purpose(rule: Rule, zone_name: str) -> tuple[str, str]:
     if rule.attribute is not None and rule.attribute.name == "lying_down":
         return "person_down", "Possible person down"
     if rule.type == "object_attribute" and rule.attribute is not None:
-        if rule.attribute.name == "transparent":
-            return "clear_bag", "Clear-bag policy"
-        return "pro_camera", "Camera policy"
+        return ATTRIBUTE_PURPOSES[rule.attribute.name]
     if "exit" in f"{rule.zone} {zone_name}".lower():
         return "blocked_exit", "Exit obstruction"
     if rule.severity == "urgent":

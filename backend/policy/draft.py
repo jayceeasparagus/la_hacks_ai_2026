@@ -21,7 +21,7 @@ class DraftRule(BaseModel):
         description="Detectable objects this rule applies to"
     )
     zone_id: str = Field(description="Id of the zone this rule applies to, or UNKNOWN if unclear")
-    attribute_name: Literal["transparent", "professional", "lying_down"] | None = Field(
+    attribute_name: Literal["transparent", "professional", "hard_hat", "safety_vest", "lying_down"] | None = Field(
         description="Attribute to check for object_attribute rules, otherwise null"
     )
     attribute_expected: bool | None = Field(

@@ -18,6 +18,23 @@ Is it a large, professional-style camera?
   binoculars, or anything that is not a camera.
 - Answer "unclear" if there is no device, it is mostly hidden, or the image is too blurry or dark.
 Give a confidence from 0 to 1 and a short reason.""",
+    "hard_hat": """\
+This is a cropped frame from a construction-site camera. Look at the main person in the image.
+Is this person wearing a hard hat (a rigid safety helmet) on their head?
+- Answer "yes" if a hard hat or rigid safety helmet is on their head.
+- Answer "no" for a bare head, a baseball cap, beanie or hood, or a hard hat that is held in the
+  hand, hanging from a belt or sitting nearby rather than worn.
+- Answer "unclear" if there is no person, their head is cut off or hidden, or the image is too blurry or dark.
+Give a confidence from 0 to 1 and a short reason.""",
+    "safety_vest": """\
+This is a cropped frame from a construction-site camera. Look at the main person in the image.
+Is this person wearing a high-visibility safety vest or jacket (fluorescent yellow, orange or lime,
+usually with reflective stripes) on their torso?
+- Answer "yes" for a hi-vis vest or hi-vis jacket that is being worn.
+- Answer "no" for ordinary clothing, including bright clothing without reflective strips, or a vest
+  that is carried rather than worn.
+- Answer "unclear" if there is no person, their torso is hidden, or the image is too blurry or dark.
+Give a confidence from 0 to 1 and a short reason.""",
     # Stretch goal: only used once the contracts support a lying_down attribute.
     "person_down": """\
 This is a cropped frame from a venue camera. Look at the main person in the image.
@@ -34,5 +51,7 @@ Give a confidence from 0 to 1 and a short reason.""",
 CHECK_FOR_ATTRIBUTE = {
     "transparent": "transparent_bag",
     "professional": "professional_camera",
+    "hard_hat": "hard_hat",
+    "safety_vest": "safety_vest",
     "lying_down": "person_down",
 }

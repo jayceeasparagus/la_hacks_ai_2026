@@ -31,13 +31,14 @@ except ModuleNotFoundError as exc:
     Severity = Literal["review", "urgent"]
 
     SUPPORTED_OBJECTS = ("person", "backpack", "handbag", "suitcase", "chair", "camera")
-    # object -> attributes that can be checked on it
+    # object -> attributes that can be checked on it. person -> hard_hat/safety_vest is the PPE
+    # contract change proposed with the construction-site rule (needs the same change in app/models.py).
     SUPPORTED_ATTRIBUTES = {
         "backpack": ("transparent",),
         "handbag": ("transparent",),
         "suitcase": ("transparent",),
         "camera": ("professional",),
-        "person": (),
+        "person": ("hard_hat", "safety_vest"),
         "chair": (),
     }
 
@@ -56,7 +57,7 @@ except ModuleNotFoundError as exc:
         polygon: list[Point] = Field(min_length=3)
 
     class Attribute(_Model):
-        name: Literal["transparent", "professional"]
+        name: Literal["transparent", "professional", "hard_hat", "safety_vest"]
         expected: bool = Field(strict=True)
 
     class Rule(_Model):

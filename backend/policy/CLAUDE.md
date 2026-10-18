@@ -59,6 +59,19 @@ Dependencies: google-genai, pydantic, python-dotenv, opencv-python, numpy, pytes
   persistent person rule. The approved contract says person down stays unsupported for the MVP, so
   for now those requests go to `unsupported`.
 
+## Construction-site safety gear (PPE)
+- `hard_hat` and `safety_vest` are attributes on `person` (object_attribute rules, expected=true).
+  "Safety gear" or "PPE" compiles to both rules. Gloves, goggles, boots, masks and harnesses go to
+  `unsupported`.
+- This needs a contract change in `app/models.py`: `SUPPORTED_ATTRIBUTES["person"]` must include both,
+  and `Attribute.name` must accept them. The mirror in `contracts.py` already has the change. With the
+  old contract, the PPE prompt section, schema options and tests switch off (`synonyms.ppe_supported()`).
+- The verifier checks have the same names (`hard_hat`, `safety_vest`), and
+  `verify.prompts.CHECK_FOR_ATTRIBUTE` maps each attribute to its check.
+- In a sentence that already made a rule, the fallback reports only standalone unsupported topics
+  (injection, concealed items, weapons, other PPE). "All employees must wear vests" is a rule, not an
+  identity request.
+
 ## Open proposals for Person 4 (contract changes need their sign-off)
 1. Add `description: str` to `Rule`, filled from `describe.describe_rule()` ("Bag is probably opaque").
 2. Person down: add `lying_down` for `person`. The engine treats a `persistent_object` rule *with* an

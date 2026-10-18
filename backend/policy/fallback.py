@@ -10,8 +10,12 @@ import re
 from policy.contracts import Zone
 from policy.draft import UNKNOWN_ZONE, DraftPolicy, DraftRule
 from policy.synonyms import (
-    BAGS, PERSON_DOWN, classify_unsupported, objects_in_text, parse_duration, zones_mentioned, zones_named_in,
+    ALL_PPE, BAGS, HARD_HAT, PERSON_DOWN, SAFETY_VEST, WEAR_REQUIREMENT, classify_unsupported_topic, objects_in_text,
+    parse_duration, zones_mentioned, zones_named_in,
 )
+
+# Unsupported topics worth reporting even inside a sentence that also produced a rule.
+STANDALONE_TOPICS = {"injection", "concealed", "weapon", "other_ppe"}
 
 log = logging.getLogger("policylens.policy")
 
@@ -64,6 +68,13 @@ def compile_fallback(prompt: str, zones: list[Zone]) -> DraftPolicy | None:
             found += [_attribute_rule(clause, BAGS, z, "transparent", True) for z in attribute_zones]
         if PRO_CAMERA.search(low):
             found += [_attribute_rule(clause, ["camera"], z, "professional", False) for z in attribute_zones]
+        # Safety gear: "everyone must wear a hard hat and a hi-vis vest", "PPE required".
+        if WEAR_REQUIREMENT.search(low):
+            everything = ALL_PPE.search(low)
+            if everything or HARD_HAT.search(low):
+                found += [_attribute_rule(clause, ["person"], z, "hard_hat", True) for z in attribute_zones]
+            if everything or SAFETY_VEST.search(low):
+                found += [_attribute_rule(clause, ["person"], z, "safety_vest", True) for z in attribute_zones]
 
         if EXIT.search(low) and KEEP_CLEAR.search(low):
             # Only people mentioned ("clear of people") -> keep them, so capability warns and drops the rule.
@@ -82,9 +93,11 @@ def compile_fallback(prompt: str, zones: list[Zone]) -> DraftPolicy | None:
 
         rules += found
         # Zone names like "VIP lounge" or "Staff entrance" must not read as unsupported requests.
-        sentence = classify_unsupported(_without_zone_names(clause, zones))
-        if sentence and sentence not in unsupported:
-            unsupported.append(sentence)
+        topic = classify_unsupported_topic(_without_zone_names(clause, zones))
+        # In a sentence that already made a rule, words like "employees" or "workers" describe who the
+        # rule covers, not an identity request; only report topics that are requests in their own right.
+        if topic and (not found or topic[0] in STANDALONE_TOPICS) and topic[1] not in unsupported:
+            unsupported.append(topic[1])
 
     if not rules and not unsupported:
         return None

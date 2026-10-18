@@ -3,6 +3,8 @@
 from policy.contracts import Rule, Zone
 from policy.synonyms import BAGS
 
+PPE_WORDS = {"hard_hat": "a hard hat", "safety_vest": "a safety vest"}
+
 
 def describe_rule(rule: Rule, zones: list[Zone]) -> str:
     """For example "Bag is probably opaque" or "Bag or chair stays for 5 seconds".
@@ -18,6 +20,9 @@ def describe_rule(rule: Rule, zones: list[Zone]) -> str:
     if rule.type == "object_attribute" and rule.attribute is not None:
         if rule.attribute.name == "transparent":
             return f"{noun} is probably {'opaque' if rule.attribute.expected else 'transparent'}"
+        if rule.attribute.name in PPE_WORDS:
+            gear = PPE_WORDS[rule.attribute.name]
+            return f"Person probably without {gear}" if rule.attribute.expected else f"Person wearing {gear}"
         if rule.attribute.expected:
             return "Camera is probably not professional-style"
         return "Professional-style camera detected"

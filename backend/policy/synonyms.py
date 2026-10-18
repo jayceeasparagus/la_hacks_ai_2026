@@ -29,6 +29,8 @@ OBJECT_SYNONYMS = {
     "camera": ["camera"], "cameras": ["camera"], "dslr": ["camera"], "dslrs": ["camera"],
     "person": ["person"], "persons": ["person"], "people": ["person"],
     "someone": ["person"], "somebody": ["person"], "anyone": ["person"], "anybody": ["person"],
+    "everyone": ["person"], "everybody": ["person"], "worker": ["person"], "workers": ["person"],
+    "visitor": ["person"], "visitors": ["person"], "contractor": ["person"], "contractors": ["person"],
 }
 
 
@@ -152,6 +154,21 @@ def person_down_enabled() -> bool:
     return "lying_down" in SUPPORTED_ATTRIBUTES.get("person", ())
 
 
+# --- safety gear (PPE) on people --------------------------------------------------------
+
+HARD_HAT = re.compile(r"\b(?:hard ?hats?|hardhats?|(?:safety )?helmets?|head protection)\b")
+SAFETY_VEST = re.compile(
+    r"\b(?:(?:safety |reflective |hi-?vis |high[- ]vis(?:ibility)? )?vests?|hi-?vis|high[- ]vis(?:ibility)?)\b"
+)
+ALL_PPE = re.compile(r"\b(?:ppe|safety (?:gear|wear|equipment|clothing)|protective (?:gear|equipment|wear|clothing))\b")
+WEAR_REQUIREMENT = re.compile(r"\b(?:wear\w*|must|need\w*|requir\w*|without|has to|have to|put on|no)\b")
+
+
+def ppe_supported() -> bool:
+    """True when the shared contracts allow hard_hat/safety_vest checks on person."""
+    return {"hard_hat", "safety_vest"} <= set(SUPPORTED_ATTRIBUTES.get("person", ()))
+
+
 # --- unsupported requests ---------------------------------------------------------------
 
 GENERIC_UNSUPPORTED = (
@@ -174,6 +191,11 @@ UNSUPPORTED_TOPICS: list[tuple[str, re.Pattern, str]] = [
      re.compile(r"\b(?:weapons?|guns?|firearms?|knife|knives|pistols?|rifles?|blades?)\b"),
      "I can't reliably recognize weapons, and PolicyLens isn't a weapons detector. Please use dedicated "
      "screening for that."),
+    ("other_ppe",
+     re.compile(r"\b(?:gloves?|goggles|safety glasses|glasses|boots|steel[- ]toe\w*|harness\w*|ear ?(?:plugs|muffs|protection)"
+                r"|respirators?|masks?|face shields?)\b"),
+     "I can't reliably check gloves, goggles, boots, masks or harnesses yet. I can check hard hats and safety "
+     "vests on people in the zones you've drawn."),
     ("identity",
      re.compile(r"\b(?:staff|employees?|vips?|identify|identity|identities|recogni[sz]\w*|faces?|who (?:is|are)"
                 r"|specific (?:people|person|individuals?)|security guards?|members? only)\b"),
@@ -201,8 +223,14 @@ UNSUPPORTED_TOPICS: list[tuple[str, re.Pattern, str]] = [
 
 def classify_unsupported(text: str) -> str | None:
     """The canonical honest sentence for an unobservable request, or None."""
+    found = classify_unsupported_topic(text)
+    return found[1] if found else None
+
+
+def classify_unsupported_topic(text: str) -> tuple[str, str] | None:
+    """(topic, sentence) for the first unobservable request in the text, or None."""
     low = text.lower()
-    for _, pattern, sentence in UNSUPPORTED_TOPICS:
+    for topic, pattern, sentence in UNSUPPORTED_TOPICS:
         if pattern.search(low):
-            return sentence
+            return topic, sentence
     return None

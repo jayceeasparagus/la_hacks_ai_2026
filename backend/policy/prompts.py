@@ -3,7 +3,7 @@
 import json
 
 from policy.contracts import Zone
-from policy.synonyms import BAGS, person_down_enabled
+from policy.synonyms import BAGS, person_down_enabled, ppe_supported
 
 SYSTEM_PROMPT = """\
 You compile venue policies written by event organizers into monitoring rules for PolicyLens,
@@ -157,6 +157,34 @@ PERSON_DOWN_OFF = """\
 - People lying down, fallen or collapsed cannot be checked yet; put such requests in "unsupported".
 """
 
+PPE_ON = """\
+- Extra attributes for person (safety gear):
+    hard_hat: is the person wearing a hard hat / safety helmet on their head?
+    safety_vest: is the person wearing a high-visibility (hi-vis) safety vest or jacket?
+  "Everyone must wear a hard hat" -> object_attribute, objects ["person"], attribute_name "hard_hat",
+  attribute_expected true, severity "review". "Safety gear" or "PPE" means both: one rule per attribute.
+  Words like "workers", "everyone" or "employees" only say who the rule covers; that is not an identity
+  request. Other gear (gloves, goggles, boots, masks, harnesses) cannot be checked: put it in unsupported.
+"""
+
+PPE_SHOT = (
+    [_zone("construction_zone", "Construction zone", "cam_site")],
+    "In the construction zone, everyone must wear a hard hat and a safety vest. Gloves too.",
+    {
+        "rules": [
+            _rule("everyone must wear a hard hat", "object_attribute", ["person"], "construction_zone",
+                  "hard_hat", True, None, "review"),
+            _rule("everyone must wear ... a safety vest", "object_attribute", ["person"], "construction_zone",
+                  "safety_vest", True, None, "review"),
+        ],
+        "unsupported": [
+            "I can't reliably check gloves, goggles, boots, masks or harnesses yet. I can check hard hats and "
+            "safety vests on people in the zones you've drawn."
+        ],
+        "ambiguities": [],
+    },
+)
+
 PERSON_DOWN_SHOT = (
     DEMO_ZONES,
     "Alert if someone is on the floor at the main entrance for more than 10 seconds.",
@@ -173,9 +201,10 @@ PERSON_DOWN_SHOT = (
 
 def build_system_prompt() -> str:
     enabled = person_down_enabled()
-    shots = FEW_SHOTS + ([PERSON_DOWN_SHOT] if enabled else [])
+    ppe = ppe_supported()
+    shots = FEW_SHOTS + ([PPE_SHOT] if ppe else []) + ([PERSON_DOWN_SHOT] if enabled else [])
     examples = "\n\n".join(f"EXAMPLE {i}\n{_render_example(*shot)}" for i, shot in enumerate(shots, start=1))
-    extra = PERSON_DOWN_ON if enabled else PERSON_DOWN_OFF
+    extra = (PPE_ON if ppe else "") + (PERSON_DOWN_ON if enabled else PERSON_DOWN_OFF)
     return f"{SYSTEM_PROMPT}{extra}\nEXAMPLES (zones, policy, the exact JSON you should output):\n\n{examples}\n"
 
 
