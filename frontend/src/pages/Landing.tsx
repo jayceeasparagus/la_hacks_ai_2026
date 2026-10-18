@@ -4,6 +4,7 @@
 // when it scrolls into view.
 import { useEffect, useRef, useState } from 'react'
 import type { Page } from '../App'
+import EaredO from '../components/EaredO'
 import Marker from '../components/Marker'
 import Stars from '../components/Stars'
 import Wordmark from '../components/Wordmark'
@@ -129,7 +130,9 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
             style={{ '--d': '80ms' } as React.CSSProperties}
           >
             <span className="text-text">Watch</span>
-            <span className="text-accent">Dog</span>
+            <span className="text-accent">
+              D<EaredO />g
+            </span>
           </h1>
           <p
             className="rise max-w-[600px] text-balance text-[30px] leading-[42px] text-[#C9C6BF]"

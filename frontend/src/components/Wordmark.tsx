@@ -1,3 +1,5 @@
+import EaredO from './EaredO'
+
 export default function Wordmark({ size = 22, onClick }: { size?: number; onClick?: () => void }) {
   return (
     <button
@@ -7,7 +9,9 @@ export default function Wordmark({ size = 22, onClick }: { size?: number; onClic
       style={{ fontSize: size, lineHeight: 1 }}
     >
       <span className="text-text">Watch</span>
-      <span className="text-accent">Dog</span>
+      <span className="text-accent">
+        D<EaredO />g
+      </span>
     </button>
   )
 }
