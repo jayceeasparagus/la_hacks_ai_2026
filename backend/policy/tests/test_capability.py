@@ -84,6 +84,17 @@ def test_zone_name_on_two_cameras_warns():
     assert any("more than one camera" in w for w in result.warnings)
 
 
+def test_two_different_zone_names_are_not_ambiguous():
+    zones = [Zone(id="press_area", name="Press area", camera_id="cam_press", polygon=SQUARE),
+             Zone(id="stands", name="Stands", camera_id="cam_stands", polygon=SQUARE)]
+    source = "Professional cameras in the press area and the stands require review"
+    for zone_id in ("press_area", "stands"):
+        result = finalize(draft(type="object_attribute", objects=["camera"], attribute_name="professional",
+                                attribute_expected=False, zone_id=zone_id, severity="review",
+                                source_text=source), zones)
+        assert result.warnings == []
+
+
 def test_unsupported_entries_are_normalized():
     d = DraftPolicy(rules=[], ambiguities=[], unsupported=[
         "Weapons are not detectable.", "I can't hear sounds.", "I can't hear sounds.", "  ",

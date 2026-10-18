@@ -179,9 +179,11 @@ def _pick_zone(zone_id: str, source: str, quote: str, zones: list[Zone], warning
             warnings.append(f"Which zone should {quote} apply to? Draw or name a zone and compile again.")
             return None
 
-    named = zones_named_in(source, zones)
-    cameras = sorted({z.camera_id for z in named})
-    if zone in named and len(cameras) > 1:
+    # Ambiguous only when the zone's own name is shared by a zone on another camera;
+    # a sentence that names two different zones ("the press area and the stands") is fine.
+    namesakes = [z for z in zones if z.name.strip().lower() == zone.name.strip().lower()]
+    cameras = sorted({z.camera_id for z in namesakes})
+    if zone in zones_named_in(source, zones) and len(cameras) > 1:
         warnings.append(
             f"{quote} matches zones on more than one camera ({', '.join(cameras)}); I used {zone.name} on "
             f"{zone.camera_id}. Rename a zone if that's wrong."
