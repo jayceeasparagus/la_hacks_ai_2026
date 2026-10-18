@@ -119,8 +119,7 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
           <a href="#how" className="transition hover:text-text">How it works</a>
           <a href="#examples" className="transition hover:text-text">Examples</a>
           <a href={REPO_URL} target="_blank" rel="noreferrer" className="transition hover:text-text">GitHub</a>
-          <button onClick={() => go('demo')} className="transition hover:text-text">Live demo</button>
-          <button onClick={() => go('setup')} className="text-text">Get started</button>
+          <button onClick={() => go('demo')} className="text-text">Live demo</button>
         </nav>
       </header>
 
@@ -140,8 +139,8 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
             Tell any camera what matters, in a sentence. It watches. You decide.
           </p>
           <div className="rise flex items-center gap-8" style={{ '--d': '300ms' } as React.CSSProperties}>
-            <button className="btn-primary group px-8 py-4 text-[19px]" onClick={() => go('setup')}>
-              Get started
+            <button className="btn-primary group px-8 py-4 text-[19px]" onClick={() => go('demo')}>
+              Live demo
               <span className="transition-transform duration-300 group-hover:translate-x-1">
                 <Arrow />
               </span>

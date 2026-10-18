@@ -150,7 +150,9 @@ def create_app(data_dir: Path | None = None, *, verifier=None, source_factory=No
         settings = Settings(root / 'settings')
         cached_verdicts = seed(settings)
         store = AlertStore(root / 'alerts.db')
-        evidence = EvidenceWriter(root / 'evidence')
+        # A policy applied to the looping demo cameras raises several alerts at once (cached verdicts are
+        # instant); with 4 slots the 5th got no evidence. A pending job copies one frame and shares its clip.
+        evidence = EvidenceWriter(root / 'evidence', max_pending=16)
         broadcaster = Broadcaster()
         broadcaster.bind(asyncio.get_running_loop())
         manager = MonitorManager(settings, store, evidence, broadcaster.publish,
