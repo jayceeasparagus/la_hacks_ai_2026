@@ -5,6 +5,11 @@ source that fails or ends is stopped, shown offline and rebuilt after 2 s with a
 fresh engine session. Replay sources that finish stay offline ('replay ended').
 A small monitor thread publishes `camera_status` whenever a camera's status
 changes, which also covers sources that block while their camera is offline.
+
+New rules can be swapped into running workers (`MonitorManager.apply_rules`): each
+camera keeps its source and starts a fresh engine session with the new rules.
+Looping demo sources replay the same objects, so they alert once per rule and track
+per applied policy instead of on every loop.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from app.models import Alert, Camera, Rule, RuleState, TrackFrame, Zone
 from app.render import annotate, encode_jpeg
 from app.settings import MAX_CAMERAS
 from app.sources import SourceError, build_source
+from app.verdicts import CachedVerdicts
 from engine.engine import RuleEngine, _default_verifier
 from engine.verification import VerificationScheduler
 from store.db import AlertStore
@@ -49,13 +55,17 @@ def _safe_error(error: BaseException) -> str:
 class CameraWorker(threading.Thread):
     def __init__(self, camera: Camera, zones: list[Zone], rules: list[Rule], *,
                  source_factory: SourceFactory, store: AlertStore, evidence: EvidenceWriter,
-                 publish: Publish, verifier=None, scheduler=None, rebuild_seconds: float = REBUILD_SECONDS):
+                 publish: Publish, verifier=None, scheduler=None, rebuild_seconds: float = REBUILD_SECONDS,
+                 verdict_lookup=None):
         super().__init__(name=f'camera-{camera.id}', daemon=True)
         self.camera = camera
         self.camera_id = camera.id
         self.zones = [zone for zone in zones if zone.camera_id == camera.id]
-        self.rule_names = {rule.id: rule.name for rule in rules}
-        self.engine = RuleEngine(camera.id, zones, rules, verifier=verifier, scheduler=scheduler)
+        self._all_zones = zones
+        self._engine_options = {'verifier': verifier, 'scheduler': scheduler, 'verdict_lookup': verdict_lookup}
+        self.rules = {rule.id: rule for rule in rules}
+        self.engine = RuleEngine(camera.id, zones, rules, **self._engine_options)
+        self._alerted: set[tuple[str, int]] = set()  # (rule, track) already alerted, for looping sources
         self._engine_lock = threading.RLock()
         self._source_offline = False
         self.adapter = ContractAdapter(camera.id)
@@ -77,7 +87,7 @@ class CameraWorker(threading.Thread):
         self._fps_log = (time.monotonic(), 0)
         self._last_state_pub = 0.0
         self._rule_states: list[RuleState] = []
-        self._latest: tuple[int, np.ndarray, TrackFrame, list[RuleState]] | None = None
+        self._latest: tuple[int, np.ndarray, TrackFrame, list[RuleState], dict] | None = None
         self._seq = 0
         self._raw_cache: tuple[int, bytes] | None = None
         self._annotated_cache: tuple[int, bytes] | None = None
@@ -135,14 +145,31 @@ class CameraWorker(threading.Thread):
             return None
         if cache is not None and cache[0] == latest[0]:
             return cache[1]
-        seq, image, tf, states = latest
-        data = encode_jpeg(annotate(image, self.zones, tf, states, self.rule_names))
+        seq, image, tf, states, verdicts = latest
+        data = encode_jpeg(annotate(image, self.zones, tf, states, self.rules, verdicts))
         if data is not None:
             with self._lock:
                 self._annotated_cache = (seq, data)
         return data
 
     # Lifecycle ---------------------------------------------------------------------------
+
+    def set_rules(self, rules: list[Rule]) -> None:
+        """Swap in new rules without touching the source: a fresh engine session starts now.
+
+        Pending checks of the old rules are abandoned; stored alerts stay as they are.
+        """
+        engine = RuleEngine(self.camera_id, self._all_zones, rules, **self._engine_options)
+        with self._engine_lock:
+            old, self.engine = self.engine, engine
+            self.rules = {rule.id: rule for rule in rules}
+            self._alerted.clear()
+        try:
+            old.close()
+        except Exception:
+            log.exception('[%s] engine close failed', self.camera_id)
+        self._publish_rule_states([], force=True)
+        log.info('[%s] now watching %d rule(s)', self.camera_id, len(engine.rules))
 
     def stop(self) -> None:
         self._stopping.set()
@@ -254,11 +281,12 @@ class CameraWorker(threading.Thread):
             if restarted:
                 self.engine.reset()
             states, alerts = self.engine.update(image, tf)
+            verdicts = self.engine.verdicts()
             self.frames_processed += 1
             self._count_frame(received)
             with self._lock:
                 self._seq += 1
-                self._latest = (self._seq, image, tf, states)
+                self._latest = (self._seq, image, tf, states, verdicts)
                 self._last_frame_ts, self._last_frame_wall = tf.ts, received
                 self._rule_states = states
             for alert in alerts:
@@ -301,6 +329,12 @@ class CameraWorker(threading.Thread):
         frame = self.engine.pop_alert_frame(alert.id)
         recent = self.engine.pop_alert_clip(alert.id)
         snapshot_ts = self.engine.pop_alert_frame_ts(alert.id)
+        if getattr(self.source, 'loops', False):
+            # A looping demo clip shows the same people again: alert once per rule and track.
+            key = (alert.rule_id, alert.track_id)
+            if key in self._alerted:
+                return
+            self._alerted.add(key)
         with self._alert_lock:
             alert = self.evidence.submit(alert, frame, recent, on_done=self._evidence_done, snapshot_ts=snapshot_ts)
             if not self.store.add(alert):
@@ -323,8 +357,9 @@ class MonitorManager:
 
     def __init__(self, settings, store: AlertStore, evidence: EvidenceWriter, publish: Publish, *,
                  verifier=None, source_factory: SourceFactory | None = None,
-                 rebuild_seconds: float = REBUILD_SECONDS):
+                 rebuild_seconds: float = REBUILD_SECONDS, cached_verdicts: CachedVerdicts | None = None):
         self.settings = settings
+        self.cached_verdicts = cached_verdicts
         self.store = store
         self.evidence = evidence
         self.publish = publish
@@ -354,10 +389,11 @@ class MonitorManager:
             workers = {}
             try:
                 for camera in cameras:
+                    lookup = self.cached_verdicts.lookup(camera.id) if self.cached_verdicts else None
                     workers[camera.id] = CameraWorker(
                         camera, zones, rules, source_factory=factory, store=self.store,
                         evidence=self.evidence, publish=self.publish, verifier=self.verifier, scheduler=self.scheduler,
-                        rebuild_seconds=self.rebuild_seconds)
+                        rebuild_seconds=self.rebuild_seconds, verdict_lookup=lookup)
             except Exception:
                 for worker in workers.values():
                     worker.close()
@@ -401,6 +437,14 @@ class MonitorManager:
         for camera_id in workers:
             self.publish('state', {'camera_id': camera_id, 'ts': 0.0, 'rule_states': []})
         return True
+
+    def apply_rules(self, rules: list[Rule]) -> None:
+        """Running cameras switch to `rules` at once (validated and saved by the caller)."""
+        with self._lock:
+            if not self.running:
+                return
+            for worker in self.workers.values():
+                worker.set_rules(rules)
 
     def close(self):
         self.stop()

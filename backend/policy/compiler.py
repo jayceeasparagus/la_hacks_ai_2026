@@ -79,7 +79,9 @@ def _compile(prompt: str, zones: list[Zone], model: str, started: float) -> tupl
         return _finish(cached, notes), "cache"
 
     try:
-        draft = _ask_gemini(text, zones, model, deadline=started + _total_timeout())
+        # With whole-frame cameras the model sees one zone for everything; capability expands it.
+        asked = [capability.everywhere_zone(zones)] if capability.whole_frame_cameras(zones) else zones
+        draft = _ask_gemini(text, asked, model, deadline=started + _total_timeout())
         result = capability.finalize(draft, zones)
     except Exception as exc:
         log.warning("Using the deterministic fallback because Gemini compile failed: %s", exc)

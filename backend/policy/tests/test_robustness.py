@@ -200,6 +200,15 @@ def test_vertex_express_key_builds_a_vertex_client(monkeypatch):
     monkeypatch.setattr(genai, "Client", lambda **kwargs: seen.update(kwargs) or SimpleNamespace())
     llm.get_client()
     assert seen["vertexai"] is True and seen["api_key"] == "AQ.test-key"
+    # Regional endpoint by default: global took ~11 s on a new connection, us-central1 ~0.75 s.
+    assert seen["http_options"].base_url == "https://us-central1-aiplatform.googleapis.com/"
+
+
+def test_vertex_location_can_go_back_to_global(monkeypatch):
+    monkeypatch.setenv("POLICYLENS_VERTEX_LOCATION", "global")
+    assert llm.vertex_express_base_url() is None
+    monkeypatch.setenv("POLICYLENS_VERTEX_LOCATION", "europe-west4")
+    assert llm.vertex_express_base_url() == "https://europe-west4-aiplatform.googleapis.com/"
 
 
 def test_no_api_key_never_builds_the_sdk_client(monkeypatch):

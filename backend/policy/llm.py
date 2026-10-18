@@ -17,6 +17,9 @@ log = logging.getLogger("policylens.llm")
 
 DEFAULT_MODEL = "gemini-flash-latest"
 DEFAULT_VERTEX_MODEL = "gemini-2.5-flash"  # Vertex has no "-latest" aliases
+# Vertex express keys default to the global endpoint, which took ~11 s on a new or idle connection
+# (2026-10-18); us-central1 answered in ~0.75 s. POLICYLENS_VERTEX_LOCATION=global restores global.
+DEFAULT_VERTEX_LOCATION = "us-central1"
 
 # Circuit breaker: after this many failures in a row, skip Gemini for a while so a dead network
 # (venue Wi-Fi, bad key, quota) costs nothing instead of a timeout on every call.
@@ -58,6 +61,14 @@ def verify_model() -> str:
     return os.getenv("GEMINI_VERIFY_MODEL") or os.getenv("GEMINI_MODEL") or _default_model()
 
 
+def vertex_express_base_url() -> str | None:
+    """The regional endpoint for Vertex express keys, or None for the SDK's global endpoint."""
+    location = (os.getenv("POLICYLENS_VERTEX_LOCATION") or DEFAULT_VERTEX_LOCATION).strip().lower()
+    if not location or location == "global":
+        return None
+    return f"https://{location}-aiplatform.googleapis.com/"
+
+
 def get_client():
     """One shared client. Reads GEMINI_API_KEY from the environment. SDK retries are off:
     the compiler retries once itself, and the verifier must never retry."""
@@ -73,7 +84,8 @@ def get_client():
             key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
             if vertex_mode() and key:
                 # Vertex AI express mode: an API key instead of a project and gcloud credentials.
-                _client = genai.Client(vertexai=True, api_key=key, http_options=http_options())
+                _client = genai.Client(vertexai=True, api_key=key,
+                                       http_options=http_options(vertex_express_base_url()))
             else:
                 _client = genai.Client(http_options=http_options())
         return _client
@@ -84,12 +96,12 @@ def credentials_configured() -> bool:
     return bool(os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY') or vertex_mode())
 
 
-def http_options():
+def http_options(base_url: str | None = None):
     from google.genai import types
 
     # attempts=0, not 1: the Interactions client maps attempts straight to max_retries, so 1 would
     # still retry once on 429/5xx (checked in google-genai 2.31.0).
-    return types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=0))
+    return types.HttpOptions(base_url=base_url, retry_options=types.HttpRetryOptions(attempts=0))
 
 
 def submit_structured(
@@ -226,6 +238,7 @@ def status() -> dict:
     """For a health endpoint: which models, whether a key is set, whether Gemini is paused."""
     return {
         "mode": "fake" if fake_mode() else ("vertex" if vertex_mode() else "gemini"),
+        "endpoint": (vertex_express_base_url() or "global") if vertex_mode() else "gemini",
         "policy_model": policy_model(),
         "verify_model": verify_model(),
         "api_key_set": credentials_configured(),

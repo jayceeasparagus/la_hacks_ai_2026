@@ -18,15 +18,47 @@ def no_frame_verifier(image, check: str) -> Verdict:
     return NO_FRAME
 
 
+def _draft(line: str) -> dict | None:
+    """A line in Person 1's draft format (`python -m vision.dump`), or None."""
+    try:
+        data = json.loads(line)
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get('tracks'), list):
+        return None
+    if 'frame_index' in data or any(isinstance(t, dict) and 'class_name' in t for t in data['tracks']):
+        return data
+    return None
+
+
 def read_frames(path: Path):
+    """Approved TrackFrames, or Person 1's draft lines converted through app.adapter.
+
+    Draft tracks with unsupported classes or bad boxes are dropped, exactly as for live cameras.
+    """
+    from app.adapter import ContractAdapter
+    adapter = None
     with path.open(encoding='utf-8') as stream:
         for line_number, line in enumerate(stream, 1):
             if not line.strip():
                 continue
             try:
-                yield TrackFrame.model_validate_json(line)
+                frame = TrackFrame.model_validate_json(line)
             except ValueError as exc:
-                raise ValueError(f'{path}:{line_number}: invalid TrackFrame: {exc}') from exc
+                draft = _draft(line)
+                if draft is None:
+                    raise ValueError(f'{path}:{line_number}: invalid TrackFrame: {exc}') from exc
+                first = adapter is None
+                try:
+                    adapter = adapter or ContractAdapter(str(draft.get('camera_id') or 'replay'))
+                    frame, restarted = adapter.convert(draft)
+                except ValueError as error:
+                    raise ValueError(f'{path}:{line_number}: invalid draft TrackFrame: {error}') from error
+                if restarted and not first:
+                    raise ValueError(f'{path}:{line_number}: timestamps go backwards')
+                if frame is None:
+                    continue  # repeated timestamp
+            yield frame
 
 
 def replay(frames, zones=None, rules=None, *, verifier=None):

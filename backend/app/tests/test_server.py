@@ -125,11 +125,13 @@ class ConfigurationTests(ServerTestCase):
         # Removing a camera that zones still reference is a conflict.
         self.assertEqual(c.put('/api/cameras', json={'cameras': cameras['cameras'][:1]}).status_code, 409)
 
-        # Configuration changes while monitoring are conflicts.
+        # Camera and zone changes while monitoring are conflicts; rules swap in live (still validated).
         self.start()
-        for path, body in [('/api/cameras', cameras), ('/api/zones', zones), ('/api/policy', rules)]:
+        for path, body in [('/api/cameras', cameras), ('/api/zones', zones)]:
             with self.subTest(path=path):
                 self.assertEqual(c.put(path, json=body).status_code, 409)
+        self.assertEqual(c.put('/api/policy', json=orphan).status_code, 409)
+        self.assertEqual(c.put('/api/policy', json=rules).status_code, 200)
         c.post('/api/monitor/stop')
         self.assertEqual(c.put('/api/policy', json=rules).status_code, 200)
 
@@ -214,6 +216,24 @@ class SyntheticDemoTests(ServerTestCase):
         self.assertEqual([alert['id'] for alert in reviewed['alerts']], [exit_alert['id']])
         self.assertEqual(reviewed['total'], 1)
 
+    def test_policy_swaps_into_running_cameras(self):
+        c = self.client
+        self.start()
+        worker = wait_for(lambda: (lambda w: w if w is not None and w.source is not None else None)(
+            self.manager.worker('cam_exit')))
+        source = worker.source
+        exit_only = [rule for rule in dump(demo_rules()) if rule['id'] == 'blocked_exit']
+        response = c.put('/api/policy', json={'rules': exit_only})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(c.get('/api/policy').json(), {'rules': exit_only})
+        self.assertEqual([rule.id for rule in worker.engine.rules], ['blocked_exit'])
+        self.assertEqual(self.manager.worker('cam_entrance').engine.rules, [])
+        self.assertIs(worker.source, source)  # the camera kept playing; nothing restarted
+        self.assertTrue(c.get('/api/monitor').json()['running'])
+        self.wait_alert('blocked_exit')
+        self.assertEqual(c.put('/api/policy', json={'rules': []}).status_code, 200)
+        self.assertEqual(worker.engine.rules, [])
+
     def test_websocket_snapshot_then_alert(self):
         with self.client.websocket_connect('/ws') as ws:
             first = ws.receive_json()
@@ -293,6 +313,27 @@ class ReplayTests(ServerTestCase):
                                        if s['error'] == 'replay ended'), None))
         self.assertEqual(ended['status'], 'offline')
         self.assertEqual(self.alerts()['total'], 1)
+
+
+class LoopTests(ServerTestCase):
+    def test_looping_source_alerts_once_per_track(self):
+        path = self.root / 'exit_bag.tracks.jsonl'
+        frames = scenario('exit_bag')
+        path.write_text(''.join(tf.model_dump_json() + '\n' for tf in frames), encoding='utf-8')
+        c = self.client
+        cameras = [demo_cameras()[1].model_copy(update={'source': f'loop:{path}'})]
+        c.put('/api/cameras', json={'cameras': dump(cameras)})
+        c.put('/api/zones', json={'zones': dump(demo_zones()[1:])})
+        c.put('/api/policy', json={'rules': dump(demo_rules()[2:])})
+        self.start()
+        worker = self.manager.worker('cam_exit')
+        wait_for(lambda: worker.frames_processed > 3 * len(frames), timeout=60)  # three loops
+        self.assertEqual(self.alerts()['total'], 1)
+        status = c.get('/api/monitor').json()['cameras'][0]
+        self.assertEqual(status['status'], 'online')  # still playing
+        # A new policy starts a fresh session: the same track may alert once more.
+        c.put('/api/policy', json={'rules': dump(demo_rules()[2:])})
+        wait_for(lambda: self.alerts()['total'] == 2, timeout=60)
 
 
 class VisionSourceTests(unittest.TestCase):

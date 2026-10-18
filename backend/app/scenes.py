@@ -3,7 +3,7 @@
     python -m app.scenes ../demo/scenes/lobby.json [--data-dir data]   # then start the server
     POLICYLENS_SCENE=../demo/scenes/lobby.json uvicorn app.main:app     # or load it at startup
 
-Loading replaces the saved cameras, zones and rules. File paths inside `clip:` and `replay:`
+Loading replaces the saved cameras, zones and rules. File paths inside `clip:`, `replay:` and `loop:`
 sources (both sides of `tracks@video`) are resolved relative to the scene file, so scenes work
 from any directory. Scenes are data only; nothing in them is executed.
 """
@@ -15,7 +15,13 @@ from pathlib import Path
 from app.models import Camera, Model, Rule, Zone
 from app.settings import Settings
 
-PATH_SOURCES = ('clip', 'replay')
+PATH_SOURCES = ('clip', 'replay', 'loop')
+
+
+class SceneVerdicts(Model):
+    """Known verifier answers for the scene's footage (see app/verdicts.py)."""
+    file: str                  # relative to the scene file
+    cameras: dict[str, str]    # camera id -> clip name used in the file's keys
 
 
 class Scene(Model):
@@ -27,13 +33,18 @@ class Scene(Model):
     rules: list[Rule]
     needs: list[str] = []      # e.g. ["person1-vision", "gemini"]: what the scene needs to be meaningful
     credits: list[str] = []
+    cached_verdicts: SceneVerdicts | None = None
 
 
 def read_scene(path: Path) -> Scene:
     scene = Scene.model_validate_json(path.read_text(encoding='utf-8'))
     base = path.resolve().parent
     cameras = [camera.model_copy(update={'source': _resolve(camera.source, base)}) for camera in scene.cameras]
-    return scene.model_copy(update={'cameras': cameras})
+    update = {'cameras': cameras}
+    if scene.cached_verdicts is not None:
+        update['cached_verdicts'] = scene.cached_verdicts.model_copy(
+            update={'file': str((base / scene.cached_verdicts.file).resolve())})
+    return scene.model_copy(update=update)
 
 
 def _resolve(source: str, base: Path) -> str:

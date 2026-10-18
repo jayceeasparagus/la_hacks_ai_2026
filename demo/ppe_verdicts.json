@@ -23,6 +23,18 @@
     "frame": 375,
     "reason": "Person is wearing a red hi-vis vest with yellow reflective stripes."
   },
+  "construction_site:26:hard_hat": {
+    "answer": true,
+    "confidence": 1.0,
+    "frame": 233,
+    "reason": "Person is wearing a grey hard hat."
+  },
+  "construction_site:26:safety_vest": {
+    "answer": true,
+    "confidence": 1.0,
+    "frame": 233,
+    "reason": "Person wearing yellow hi-vis vest with reflective stripes."
+  },
   "construction_site:34:hard_hat": {
     "answer": true,
     "confidence": 1.0,

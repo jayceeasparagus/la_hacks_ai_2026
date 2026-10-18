@@ -6,8 +6,8 @@ warnings or `unsupported` entries. `compile_policy_with_info()` also returns whi
 
 ## Pipeline
 normalize the prompt (2,000 char cap) -> cache -> Gemini (`llm.py`, schema from `draft.py`, prompt from
-`prompts.py`, 1 retry, 12 s total) -> `capability.finalize()` -> cache. On any failure: `fallback.py`
-(keyword matching for the demo prompt and paraphrases) -> `capability.finalize()`. Gemini answers and
+`prompts.py`, 1 retry, 30 s total, `POLICYLENS_COMPILE_TIMEOUT_S`) -> `capability.finalize()` -> cache.
+On any failure: `fallback.py` (keyword matching for the demo prompt and paraphrases) -> `capability.finalize()`. Gemini answers and
 fallback answers both pass through `capability.py`, which is the real safety net.
 
 ## Contracts
@@ -39,8 +39,11 @@ Never change the contracts from here. The approved contract differs from the ori
   model there is `gemini-2.5-flash`, because Vertex has no `-latest` aliases. Express-mode keys
   (`GOOGLE_API_KEY`) build `genai.Client(vertexai=True, api_key=...)`. With a fake key the Vertex
   path reaches auth (401), so the route is right. Run `python -m policy.check_gemini` to test a real setup.
-- NOT yet checked against the live API, because there's no key yet: whether the server accepts these
-  schemas, and real latency. Run `pytest -m live` once `.env` has `GEMINI_API_KEY`.
+- Checked live on 2026-10-18 with a Vertex express key: the schemas are accepted and `pytest -m live` passes.
+- Express keys go to the regional `us-central1` endpoint by default (`POLICYLENS_VERTEX_LOCATION`, `global`
+  restores the SDK default). Why: the global endpoint took ~11 s on a new or idle connection; us-central1
+  answered a cold compile in 3.6 s and a warm image check in 1.25 s. A bad location fails fast and the
+  compiler falls back offline.
 
 ## Environment
 `GEMINI_API_KEY`, `GEMINI_MODEL` (default `gemini-flash-latest`), `GEMINI_VERIFY_MODEL`,
@@ -53,6 +56,11 @@ Dependencies: google-genai, pydantic, python-dotenv, opencv-python, numpy, pytes
 - `python -m pytest policy/tests verify/tests` runs offline. `-m live` runs the Gemini tests.
 
 ## Decisions and gotchas
+- Whole-frame cameras (`capability.whole_frame_cameras`): when every camera has exactly one zone covering
+  at least 90% of its frame (the site safety demo), every rule is copied to every camera's zone, whatever
+  place the text names, and Gemini is shown a single "Everywhere" zone. Drawn zones keep normal scoping, so
+  a place that isn't drawn still asks "Which zone…?" (test 06).
+  Why: the live demo has no zones by design; without this, a policy naming no zone compiled to 0 rules.
 - The demo prompt must compile with zero warnings. Don't add warnings for things the text states clearly.
 - Persistent rules never include `person`. The one exception is the person-down rule (`lying_down`).
 - When the fallback finds no duration it leaves it null, so capability's default (10 s, with a warning)

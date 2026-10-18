@@ -9,7 +9,7 @@ export type BBox = [number, number, number, number] // x1, y1, x2, y2 normalized
 export interface Camera {
   id: string
   name: string
-  source: string // "webcam:0", "url:<stream>", "clip:<path>", "synthetic:<scene>" or "replay:<tracks>"
+  source: string // "webcam:0", "url:<stream>", "clip:<path>", "synthetic:<scene>", "replay:<tracks>" or "loop:<tracks>"
 }
 
 export interface Zone {

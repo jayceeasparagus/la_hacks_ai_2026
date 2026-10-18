@@ -116,3 +116,6 @@ mobile apps, SMS or dispatch integrations, real authentication.
 - Backend:  cd backend && uvicorn app.main:app --port 8000
 - Frontend: cd frontend && npm run dev
 - Replay:   cd backend && python -m engine.replay ../clips/exit_bag.tracks.jsonl
+- Live policy demo: cd backend && POLICYLENS_SCENE=../demo/scenes/site_safety.json uvicorn app.main:app --port 8000,
+  then open http://localhost:5173/#/demo (see demo/README.md). Rules may change while monitoring
+  (PUT /api/policy swaps them into running cameras); cameras and zones still need a stop.

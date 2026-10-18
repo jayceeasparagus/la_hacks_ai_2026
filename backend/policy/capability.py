@@ -1,9 +1,14 @@
 """Deterministic safety net: validate, normalize and fill defaults, turning a DraftPolicy into
-a CompileResult. Runs on every Gemini answer and on every fallback result."""
+a CompileResult. Runs on every Gemini answer and on every fallback result.
+
+Whole-frame cameras: when every camera has a single zone covering its whole frame (the site
+safety demo), there are no zones to choose from. Each rule then applies to every camera, whatever
+place the text or the model named."""
 
 import math
 import re
 
+from engine.zones import is_whole_frame
 from policy.contracts import Attribute, CompileResult, Rule, Zone
 from policy.draft import DraftPolicy, DraftRule
 from policy.synonyms import (
@@ -33,16 +38,31 @@ _DURATION_NOTE = re.compile(r"\b(duration|time limit|how long)\b", re.IGNORECASE
 _BIG_CAMERA_WORDS = re.compile(r"\b(professional|pro|dslrs?|big|large|video|cinema|broadcast)\b", re.IGNORECASE)
 
 
+def whole_frame_cameras(zones: list[Zone]) -> bool:
+    """True when every camera has exactly one zone and it covers the whole frame."""
+    cameras = [z.camera_id for z in zones]
+    return bool(zones) and len(set(cameras)) == len(cameras) and all(is_whole_frame(z.polygon) for z in zones)
+
+
+def everywhere_zone(zones: list[Zone]) -> Zone:
+    """The one zone the model sees in whole-frame mode, standing for every camera."""
+    return Zone(id=zones[0].id, camera_id="every_camera", name="Everywhere (every camera, whole frame)",
+                polygon=[(0, 0), (1, 0), (1, 1), (0, 1)])
+
+
 def finalize(draft: DraftPolicy, zones: list[Zone]) -> CompileResult:
     warnings: list[str] = []
     unsupported: list[str] = list(draft.unsupported)
     rules: list[Rule] = []
     used_default_duration = False
+    everywhere = whole_frame_cameras(zones)
     for draft_rule in draft.rules:
+        if everywhere:
+            draft_rule = draft_rule.model_copy(update={"zone_id": zones[0].id})
         rule, defaulted = _finalize_rule(draft_rule, zones, warnings, unsupported)
         used_default_duration |= defaulted
         if rule is not None:
-            rules.append(rule)
+            rules += [rule.model_copy(update={"zone": z.id}) for z in zones] if everywhere else [rule]
 
     rules = _merge_duplicates(rules)
     if len(rules) > MAX_RULES:

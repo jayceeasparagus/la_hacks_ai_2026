@@ -119,6 +119,7 @@ export default function Landing({ go }: { go: (p: Page) => void }) {
           <a href="#how" className="transition hover:text-text">How it works</a>
           <a href="#examples" className="transition hover:text-text">Examples</a>
           <a href={REPO_URL} target="_blank" rel="noreferrer" className="transition hover:text-text">GitHub</a>
+          <button onClick={() => go('demo')} className="transition hover:text-text">Live demo</button>
           <button onClick={() => go('setup')} className="text-text">Get started</button>
         </nav>
       </header>

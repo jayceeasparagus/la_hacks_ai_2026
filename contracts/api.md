@@ -51,7 +51,7 @@ Further contract changes require sign-off under `CLAUDE.md`.
 All payloads are JSON unless noted. Collection endpoints return objects, not bare
 arrays. Validate the entire request before changing configuration. Unknown fields
 and invalid values return 422. Referenced unknown cameras/zones are rejected.
-Conflicting duplicate IDs or configuration changes while monitoring return 409.
+Conflicting duplicate IDs, or camera and zone changes while monitoring, return 409.
 Missing resources return 404. Camera count is capped at three.
 
 | Method | Path | Request | Successful response |
@@ -65,7 +65,7 @@ Missing resources return 404. Camera count is capped at three.
 | PUT | `/api/zones` | `{zones: Zone[]}` | Same object; replaces entire list |
 | POST | `/api/policy/compile` | `{prompt: string}` | `CompileResult`; uses saved zones, does not activate |
 | GET | `/api/policy` | — | `{rules: Rule[]}` |
-| PUT | `/api/policy` | `{rules: Rule[]}` | Same object; activates validated edited rules |
+| PUT | `/api/policy` | `{rules: Rule[]}` | Same object; activates validated edited rules, also while monitoring |
 | POST | `/api/monitor/start` | Empty body | `{running: true}`; idempotent |
 | POST | `/api/monitor/stop` | Empty body | `{running: false}`; idempotent |
 | GET | `/api/monitor` | — | `{running: boolean, cameras: CameraStatus[]}` |
@@ -79,7 +79,11 @@ last_frame_ts: number|null, error: string|null}`. Do not include credentials fro
 camera URLs in errors or logs. Decision writes retain an audit record; repeating
 the same decision is idempotent.
 
-Configuration edits require stopping monitoring for the MVP. Settings persist as
+Camera and zone edits require stopping monitoring for the MVP. Rule edits
+(`PUT /api/policy`) may happen while monitoring (approved 2026-10-18 for the live
+policy demo): each running camera keeps its source and starts a fresh engine session
+with the new rules. Pending verifications of the old rules are discarded, as in a
+session reset; stored alerts stay intact. Settings persist as
 JSON; alerts and decision history persist in SQLite. No authentication or external
 notification routes are included.
 
