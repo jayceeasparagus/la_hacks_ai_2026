@@ -19,7 +19,7 @@ from pathlib import Path
 import cv2
 
 from vision.annotate import draw_annotations
-from vision.detector import PROMPTS
+from vision.detector import CLASSES
 from vision.pipeline import VisionPipeline
 
 SWITCH_GAP_SECONDS = 1.0
@@ -79,7 +79,7 @@ def dump(clip: Path, camera_id: str, imgsz: int) -> None:
     elapsed = time.monotonic() - start
     print(f"{clip.name}: {frames} frames in {elapsed:.1f} s ({frames / max(elapsed, 1e-9):.1f} fps)")
     print(f"  wrote {tracks_path.name} and {video_path.name}")
-    for cls in dict.fromkeys(PROMPTS.values()):
+    for cls in CLASSES:
         ids = sorted((i for i, t in tracks.items() if t["cls"] == cls), key=lambda i: -tracks[i]["seen"])
         if not counts[cls]:
             continue

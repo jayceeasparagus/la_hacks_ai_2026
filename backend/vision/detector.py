@@ -2,6 +2,8 @@
 
 Each prompt the model sees maps to one contract class name, so we can try
 wording like "DSLR camera" while the rest of the system still sees "camera".
+Prompts mapped to None are decoys: they compete in (class-agnostic) NMS so a
+phone becomes "cell phone" instead of "camera", and are never reported.
 Per-class confidence thresholds live in CONFIDENCE; the model runs at the
 lowest of them and we filter per class afterwards.
 
@@ -30,15 +32,19 @@ from vision.capture import SINGLE_CAMERA_SIZE, Capture
 WEIGHTS = Path(__file__).parent / "weights" / "yolov8s-worldv2.pt"
 TRACKER_CFG = Path(__file__).parent / "bytetrack.yaml"
 
-# prompt given to YOLO-World -> class name used by the rest of the system
+# prompt given to YOLO-World -> class name used by the rest of the system (None = decoy)
+# Plain "camera" fired on the back of a phone in live tests; these wordings did not.
 PROMPTS = {
     "person": "person",
     "backpack": "backpack",
     "handbag": "handbag",
     "suitcase": "suitcase",
     "chair": "chair",
-    "camera": "camera",
+    "DSLR camera": "camera",
+    "video camera": "camera",
+    "cell phone": None,
 }
+CLASSES = list(dict.fromkeys(c for c in PROMPTS.values() if c))
 
 # minimum confidence per contract class
 CONFIDENCE = {
@@ -84,7 +90,12 @@ class Detector:
         self.model = load_model(prompts)
         # model output index -> contract class name
         self.class_names = [prompts[p] for p in prompts]
-        self.min_conf = min(confidence[c] for c in self.class_names)
+        self.min_conf = min(confidence[c] for c in self.class_names if c)
+        # track_id -> confidence-weighted class votes, so one bag does not flip
+        # between backpack / handbag / suitcase from frame to frame
+        self._votes: dict[int, Counter] = {}
+        self._last_seen: dict[int, int] = {}
+        self._calls = 0
 
     def detect(self, image: np.ndarray) -> list[Detection]:
         result = self.model.predict(image, conf=self.min_conf, imgsz=self.imgsz, agnostic_nms=True,
@@ -101,13 +112,25 @@ class Detector:
         """
         result = self.model.track(image, persist=True, tracker=str(TRACKER_CFG), conf=0.1, agnostic_nms=True,
                                   imgsz=self.imgsz, device=self.device, verbose=False)[0]
-        return [d for d in self.to_detections(result) if d.track_id is not None]
+        detections = [d for d in self.to_detections(result) if d.track_id is not None]
+        self._calls += 1
+        for d in detections:
+            votes = self._votes.setdefault(d.track_id, Counter())
+            votes[d.cls] += d.conf
+            self._last_seen[d.track_id] = self._calls
+            d.cls = votes.most_common(1)[0][0]
+        if self._calls % 300 == 0:  # forget tracks unseen for 300 frames
+            for track_id in [t for t, seen in self._last_seen.items() if self._calls - seen > 300]:
+                del self._votes[track_id], self._last_seen[track_id]
+        return detections
 
     def reset_tracker(self) -> None:
         """Forget all tracks, e.g. before replaying a clip from the start."""
         predictor = self.model.predictor
         for tracker in getattr(predictor, "trackers", None) or []:
             tracker.reset()
+        self._votes.clear()
+        self._last_seen.clear()
 
     def to_detections(self, result) -> list[Detection]:
         """Convert one ultralytics result (predict or track) to filtered Detections."""
@@ -122,7 +145,7 @@ class Detector:
         detections = []
         for box, conf, cls_index, track_id in zip(xyxyn, confs, classes, ids):
             cls = self.class_names[cls_index]
-            if conf < self.confidence[cls]:
+            if cls is None or conf < self.confidence[cls]:
                 continue
             bbox = tuple(round(float(v), 4) for v in box)
             detections.append(Detection(cls, round(float(conf), 3), bbox,
@@ -157,7 +180,7 @@ def main() -> None:
 
     prompts = dict(PROMPTS)
     if args.camera_prompt:
-        del prompts["camera"]
+        prompts = {p: c for p, c in prompts.items() if c != "camera"}
         prompts[args.camera_prompt] = "camera"
 
     detector = Detector(prompts=prompts, device=args.device, imgsz=args.imgsz)
@@ -198,11 +221,11 @@ def main() -> None:
         return
     elapsed = time.monotonic() - start
     print(f"{frames} frames, {frames / elapsed:.1f} fps end to end, {1000 * infer_total / frames:.0f} ms per inference")
-    for cls in PROMPTS:
+    for cls in CLASSES:
         print(f"  {cls:9s} {counts[cls]:6d} detections in {frames_with[cls]:5d} frames")
     if args.track:
         print("tracks (frames are 1-based; seen = frames the id was reported):")
-        for cls in PROMPTS:
+        for cls in CLASSES:
             ids = sorted((t for t in tracks.items() if t[1]["cls"] == cls), key=lambda t: -t[1]["seen"])
             if not ids:
                 continue
