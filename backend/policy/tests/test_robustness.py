@@ -141,6 +141,12 @@ def test_verify_request_uses_minimal_thinking_and_an_image(client):
     assert seen["input"][1]["mime_type"] == "image/jpeg"
 
 
+def test_sdk_retries_are_off():
+    from google.genai._gaos.google_genai import _translate_retry_config
+
+    assert _translate_retry_config(llm.http_options()).max_retries == 0
+
+
 def test_status_reports_mode_and_models(monkeypatch):
     monkeypatch.setenv("GEMINI_MODEL", "gemini-test")
     monkeypatch.delenv("GEMINI_VERIFY_MODEL", raising=False)

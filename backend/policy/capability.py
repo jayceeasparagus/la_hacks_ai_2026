@@ -1,6 +1,7 @@
 """Deterministic safety net: validate, normalize and fill defaults, turning a DraftPolicy into
 a CompileResult. Runs on every Gemini answer and on every fallback result."""
 
+import math
 import re
 
 from policy.contracts import SUPPORTED_ATTRIBUTES, Attribute, CompileResult, Rule, Zone
@@ -135,6 +136,8 @@ def _person_down_rule(d: DraftRule, source: str, quote: str, zones: list[Zone], 
 
 def _duration(seconds: float | None, rule_type: str, quote: str, warnings: list[str]) -> tuple[float, bool]:
     """(duration, whether the default was used): defaults, clamping and the matching warnings."""
+    if seconds is not None and math.isnan(seconds):  # Pydantic accepts a bare NaN in JSON
+        seconds = None
     if seconds is None:
         if rule_type == "object_attribute":
             return DEFAULT_ATTRIBUTE_DURATION_S, False
@@ -180,11 +183,15 @@ def _merge_duplicates(rules: list[Rule]) -> list[Rule]:
 
 def _assign_ids_and_names(rules: list[Rule], zones: list[Zone]) -> None:
     zone_names = {z.id: z.name for z in zones}
-    used: dict[str, int] = {}
+    used: set[str] = set()
     for rule in rules:
         base_id, name = _purpose(rule, zone_names.get(rule.zone, rule.zone))
-        used[base_id] = used.get(base_id, 0) + 1
-        rule.id = base_id if used[base_id] == 1 else f"{base_id}_{used[base_id]}"
+        rule_id, n = base_id, 1
+        while rule_id in used:  # the engine keys incidents by rule id, so ids must be unique
+            n += 1
+            rule_id = f"{base_id}_{n}"
+        used.add(rule_id)
+        rule.id = rule_id
         rule.name = name
 
 

@@ -20,8 +20,9 @@ the copy and check for field differences. Never change the contracts from here.
   response_format={"type": "text", "mime_type": "application/json", "schema": {...}},
   generation_config={"thinking_level": "minimal"}, timeout=<seconds>)` -> `.output_text`.
 - Image part: `{"type": "image", "data": <base64>, "mime_type": "image/jpeg"}`, after the text part.
-- The client retries 4 times by default. We pass `HttpRetryOptions(attempts=1)` and enforce our own
-  wall-clock timeout with `future.result(timeout=...)`.
+- The client retries 4 times by default. We pass `HttpRetryOptions(attempts=0)`; `attempts=1` would
+  still retry once, because the Interactions client maps attempts straight to max_retries. We also
+  enforce our own wall-clock timeout with `future.result(timeout=...)`.
 - Schemas go through `draft.structured_output_schema()`, which inlines `$ref`s and drops titles and defaults.
 - NOT yet checked against the live API, because there's no key yet: whether the server accepts these
   schemas, and real latency. Run `pytest -m live` once `.env` has `GEMINI_API_KEY`.

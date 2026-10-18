@@ -12,6 +12,8 @@ from policy.contracts import CompileResult, Zone
 log = logging.getLogger("policylens.policy")
 
 DEFAULT_DIR = Path(__file__).parent / ".cache"
+# Bump when prompts or capability logic change, so stale compiled results aren't served.
+CACHE_VERSION = 2
 
 _memory: dict[str, CompileResult] = {}
 _lock = threading.Lock()
@@ -23,7 +25,8 @@ def cache_dir() -> Path:
 
 def make_key(prompt: str, zones: list[Zone], model: str) -> str:
     payload = json.dumps(
-        {"prompt": prompt, "zones": [z.model_dump() for z in zones], "model": model}, sort_keys=True
+        {"v": CACHE_VERSION, "prompt": prompt, "zones": [z.model_dump() for z in zones], "model": model},
+        sort_keys=True,
     )
     return hashlib.sha256(payload.encode()).hexdigest()
 

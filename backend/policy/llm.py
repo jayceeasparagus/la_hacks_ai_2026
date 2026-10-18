@@ -52,10 +52,17 @@ def get_client():
     with _client_lock:
         if _client is None:
             from google import genai
-            from google.genai import types
 
-            _client = genai.Client(http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)))
+            _client = genai.Client(http_options=http_options())
         return _client
+
+
+def http_options():
+    from google.genai import types
+
+    # attempts=0, not 1: the Interactions client maps attempts straight to max_retries, so 1 would
+    # still retry once on 429/5xx (checked in google-genai 2.31.0).
+    return types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=0))
 
 
 def submit_structured(

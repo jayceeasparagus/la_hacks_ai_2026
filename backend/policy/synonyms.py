@@ -48,9 +48,19 @@ NUMBER_WORDS = {
 }
 _UNIT_SECONDS = {"s": 1, "sec": 1, "second": 1, "m": 60, "min": 60, "minute": 60, "h": 3600, "hr": 3600, "hour": 3600}
 _DIGIT_DURATION = re.compile(r"(\d+(?:\.\d+)?)[\s-]*(seconds?|secs?|s|minutes?|mins?|hours?|hrs?|h)\b")
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_UNITS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9}
 _WORD_DURATION = re.compile(
-    r"\b(" + "|".join(sorted(NUMBER_WORDS, key=len, reverse=True)) + r")[\s-]+(seconds?|minutes?|hours?)\b"
+    r"\b((?:" + "|".join(_TENS) + r")[\s-](?:" + "|".join(_UNITS) + r")"  # "twenty-five", "thirty five"
+    r"|" + "|".join(sorted(NUMBER_WORDS, key=len, reverse=True)) + r")[\s-]+(seconds?|minutes?|hours?)\b"
 )
+
+
+def _word_number(words: str) -> float:
+    parts = re.split(r"[\s-]", words)
+    if len(parts) == 2 and parts[0] in _TENS:
+        return _TENS[parts[0]] + _UNITS[parts[1]]
+    return NUMBER_WORDS[words]
 _HALF = re.compile(r"\bhalf (?:a|an) (minute|hour)\b")
 
 
@@ -63,7 +73,7 @@ def parse_duration(text: str) -> float | None:
     if m := _DIGIT_DURATION.search(low):
         found.append((m.start(), float(m.group(1)) * _unit(m.group(2))))
     if m := _WORD_DURATION.search(low):
-        found.append((m.start(), NUMBER_WORDS[m.group(1)] * _unit(m.group(2))))
+        found.append((m.start(), _word_number(m.group(1)) * _unit(m.group(2))))
     return min(found)[1] if found else None
 
 
@@ -87,21 +97,30 @@ _GENERIC_ZONE_WORDS = {"the", "and", "zone", "area", "main", "side", "camera", "
 
 
 def zones_named_in(text: str, zones: list[Zone]) -> list[Zone]:
-    """Zones whose name the text mentions, best match first (ties keep zone order)."""
-    words = set(re.findall(r"[a-z0-9]+", text.lower()))
+    """The best-matching zones the text mentions (several only on a tie, in zone order)."""
+    scored = _zone_scores(text, zones)
+    return [z for score, z in scored if score == scored[0][0]] if scored else []
+
+
+def zones_mentioned(text: str, zones: list[Zone]) -> list[Zone]:
+    """Every zone the text mentions by its full name, in zone order."""
+    low = text.lower()
+    return [z for z in zones if re.search(rf"\b{re.escape(z.name.lower())}\b", low)]
+
+
+def _zone_scores(text: str, zones: list[Zone]) -> list[tuple[int, Zone]]:
+    low = text.lower()
+    words = set(re.findall(r"[a-z0-9]+", low))
     scored = []
     for index, zone in enumerate(zones):
         tokens = {t for t in re.findall(r"[a-z0-9]+", f"{zone.name} {zone.id}".lower())
-                  if len(t) >= 3 and t not in _GENERIC_ZONE_WORDS}
+                  if (len(t) >= 3 or t.isdigit()) and t not in _GENERIC_ZONE_WORDS}
         score = sum(1 for t in tokens if t in words or t + "s" in words or (t.endswith("s") and t[:-1] in words))
-        if zone.name.lower() in text.lower():
+        if re.search(rf"\b{re.escape(zone.name.lower())}\b", low):
             score += 2
         if score:
             scored.append((-score, index, zone))
-    if not scored:
-        return []
-    best = min(s for s, _, _ in scored)
-    return [z for s, _, z in sorted(scored, key=lambda x: (x[0], x[1])) if s == best]
+    return [(-s, z) for s, _, z in sorted(scored, key=lambda x: (x[0], x[1]))]
 
 
 # --- person down (stretch goal, needs the lying_down attribute in the contracts) -------------

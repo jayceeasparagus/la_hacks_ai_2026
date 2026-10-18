@@ -37,6 +37,9 @@ def main() -> None:
             print(f"row {i}: could not read {clip} at {row['time_s']} s")
             continue
         crop = _padded_crop(frame, [float(row[k]) for k in ("x1", "y1", "x2", "y2")])
+        if crop.size == 0:
+            print(f"row {i}: empty or inverted box, skipped")
+            continue
         folder = args.out / row["check"] / row["label"]
         folder.mkdir(parents=True, exist_ok=True)
         name = f"{clip.stem}_{float(row['time_s']):.1f}s_{i}.jpg"
