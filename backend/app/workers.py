@@ -182,7 +182,10 @@ class CameraWorker(threading.Thread):
                     break
                 if getattr(source, 'ended', False):
                     with self._engine_lock:
-                        for alert in self.engine.drain(timeout=5):
+                        # Give in-flight checks their full budget; a real Gemini check can take ~12 s.
+                        scheduler = self.engine.scheduler
+                        drain_s = (scheduler.timeout if scheduler is not None else 5) + 2
+                        for alert in self.engine.drain(timeout=drain_s):
                             self._handle_alert(alert, time.monotonic())
                     self._set_state('offline', getattr(source, 'error', None) or 'source ended')
                     log.info('[%s] source ended: %s', self.camera_id, self._error)
