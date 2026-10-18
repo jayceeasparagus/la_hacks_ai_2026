@@ -1,0 +1,149 @@
+{
+  "name": "Venue: clear bags and cameras (Pexels footage)",
+  "description": "Entrance camera with a clear tote (should pass), press camera with a shoulder-mounted video camera (review alert), and fans filming with phones (phones must not trigger the camera rule).",
+  "policy": "At the main entrance, only clear bags are permitted. Professional cameras in the press area and the stands require review.",
+  "cameras": [
+    {
+      "id": "cam_entrance",
+      "name": "Main entrance",
+      "source": "clip:../../clips/pexels/clear_tote_7762512.mp4"
+    },
+    {
+      "id": "cam_press",
+      "name": "Press area",
+      "source": "clip:../../clips/pexels/shoulder_camera_16612791.mp4"
+    },
+    {
+      "id": "cam_stands",
+      "name": "Stands",
+      "source": "clip:../../clips/pexels/phones_concert_12719510.mp4"
+    }
+  ],
+  "zones": [
+    {
+      "id": "main_entrance",
+      "camera_id": "cam_entrance",
+      "name": "Main entrance",
+      "polygon": [
+        [
+          0.02,
+          0.02
+        ],
+        [
+          0.98,
+          0.02
+        ],
+        [
+          0.98,
+          0.98
+        ],
+        [
+          0.02,
+          0.98
+        ]
+      ]
+    },
+    {
+      "id": "press_area",
+      "camera_id": "cam_press",
+      "name": "Press area",
+      "polygon": [
+        [
+          0.02,
+          0.02
+        ],
+        [
+          0.98,
+          0.02
+        ],
+        [
+          0.98,
+          0.98
+        ],
+        [
+          0.02,
+          0.98
+        ]
+      ]
+    },
+    {
+      "id": "stands",
+      "camera_id": "cam_stands",
+      "name": "Stands",
+      "polygon": [
+        [
+          0.02,
+          0.02
+        ],
+        [
+          0.98,
+          0.02
+        ],
+        [
+          0.98,
+          0.98
+        ],
+        [
+          0.02,
+          0.98
+        ]
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "clear_bag",
+      "name": "Clear-bag policy",
+      "type": "object_attribute",
+      "objects": [
+        "backpack",
+        "handbag",
+        "suitcase"
+      ],
+      "zone": "main_entrance",
+      "attribute": {
+        "name": "transparent",
+        "expected": true
+      },
+      "duration_seconds": 1.0,
+      "severity": "review"
+    },
+    {
+      "id": "pro_camera",
+      "name": "Camera policy",
+      "type": "object_attribute",
+      "objects": [
+        "camera"
+      ],
+      "zone": "press_area",
+      "attribute": {
+        "name": "professional",
+        "expected": false
+      },
+      "duration_seconds": 1.0,
+      "severity": "review"
+    },
+    {
+      "id": "pro_camera_2",
+      "name": "Camera policy",
+      "type": "object_attribute",
+      "objects": [
+        "camera"
+      ],
+      "zone": "stands",
+      "attribute": {
+        "name": "professional",
+        "expected": false
+      },
+      "duration_seconds": 1.0,
+      "severity": "review"
+    }
+  ],
+  "needs": [
+    "person1-vision",
+    "gemini"
+  ],
+  "credits": [
+    "Pexels videos 7762512, 16612791, 12719510 (Pexels License, free to use)"
+  ]
+}

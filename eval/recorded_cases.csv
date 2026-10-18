@@ -1,0 +1,21 @@
+case_id,clip,tracks,config,camera_id,rule,expected_count,expected_windows,stub_bag,stub_camera
+exit_bag,generated/evaluation/exit_bag.mp4,generated/evaluation/exit_bag.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5.0, 5.1]]",clear,ordinary
+walkthrough,generated/evaluation/walkthrough.mp4,generated/evaluation/walkthrough.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,0,[],clear,ordinary
+short_bag,generated/evaluation/short_bag.mp4,generated/evaluation/short_bag.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,0,[],clear,ordinary
+two_bags,generated/evaluation/two_bags.mp4,generated/evaluation/two_bags.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,2,"[[5.0, 5.1], [5.0, 5.1]]",clear,ordinary
+dropout,generated/evaluation/dropout.mp4,generated/evaluation/dropout.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5.0, 5.1]]",clear,ordinary
+id_switch,generated/evaluation/id_switch.mp4,generated/evaluation/id_switch.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5.0, 5.1]]",clear,ordinary
+reentry,generated/evaluation/reentry.mp4,generated/evaluation/reentry.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,2,"[[5.0, 5.1], [16.0, 16.1]]",clear,ordinary
+long_dropout,generated/evaluation/long_dropout.mp4,generated/evaluation/long_dropout.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[9.3, 9.4]]",clear,ordinary
+threshold_dropout,generated/evaluation/threshold_dropout.mp4,generated/evaluation/threshold_dropout.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5, 5.5]]",clear,ordinary
+empty,generated/evaluation/empty.mp4,generated/evaluation/empty.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,0,[],clear,ordinary
+chair,generated/evaluation/chair.mp4,generated/evaluation/chair.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[5.0, 5.1]]",clear,ordinary
+outside_reset,generated/evaluation/outside_reset.mp4,generated/evaluation/outside_reset.tracks.jsonl,generated/evaluation/temporal.json,cam_exit,blocked_exit,1,"[[9.5, 9.6]]",clear,ordinary
+clear_bag_pass,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,clear_bag,0,[],clear,ordinary
+opaque_bag_review,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,clear_bag,1,"[[1, 1.1]]",opaque,ordinary
+professional_camera_review,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,pro_camera,1,"[[1, 1.1]]",clear,professional
+ordinary_camera_pass,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,pro_camera,0,[],clear,ordinary
+unclear_bag_review,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,clear_bag,1,"[[1, 1.1]]",unclear,ordinary
+unclear_camera_review,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,pro_camera,1,"[[1, 1.1]]",clear,unclear
+both_violations,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,*,2,"[[1, 1.1], [1, 1.1]]",opaque,professional
+both_compliant,generated/evaluation/entrance/entrance.mp4,generated/evaluation/entrance/entrance.tracks.jsonl,generated/evaluation/entrance/config.json,cam_entrance,*,0,[],clear,ordinary

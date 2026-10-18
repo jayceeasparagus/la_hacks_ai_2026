@@ -1,0 +1,134 @@
+{
+  "name": "Construction site: hard hats and hi-vis vests (Pexels footage)",
+  "description": "Workers on a construction site and in a warehouse. Each person's crop is checked for a hard hat and a hi-vis vest; PolicyLens never identifies who anyone is.",
+  "policy": "In the construction zone and on the warehouse floor, everyone must wear a hard hat and a safety vest.",
+  "cameras": [
+    {
+      "id": "cam_site",
+      "name": "Construction site",
+      "source": "clip:../../clips/pexels/construction_workers_5434220.mp4"
+    },
+    {
+      "id": "cam_warehouse",
+      "name": "Warehouse",
+      "source": "clip:../../clips/pexels/warehouse_4281236.mp4"
+    }
+  ],
+  "zones": [
+    {
+      "id": "construction_zone",
+      "camera_id": "cam_site",
+      "name": "Construction zone",
+      "polygon": [
+        [
+          0.02,
+          0.02
+        ],
+        [
+          0.98,
+          0.02
+        ],
+        [
+          0.98,
+          0.98
+        ],
+        [
+          0.02,
+          0.98
+        ]
+      ]
+    },
+    {
+      "id": "warehouse_floor",
+      "camera_id": "cam_warehouse",
+      "name": "Warehouse floor",
+      "polygon": [
+        [
+          0.02,
+          0.02
+        ],
+        [
+          0.98,
+          0.02
+        ],
+        [
+          0.98,
+          0.98
+        ],
+        [
+          0.02,
+          0.98
+        ]
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "hard_hat",
+      "name": "Hard-hat policy",
+      "type": "object_attribute",
+      "objects": [
+        "person"
+      ],
+      "zone": "construction_zone",
+      "attribute": {
+        "name": "hard_hat",
+        "expected": true
+      },
+      "duration_seconds": 1.0,
+      "severity": "review"
+    },
+    {
+      "id": "hard_hat_2",
+      "name": "Hard-hat policy",
+      "type": "object_attribute",
+      "objects": [
+        "person"
+      ],
+      "zone": "warehouse_floor",
+      "attribute": {
+        "name": "hard_hat",
+        "expected": true
+      },
+      "duration_seconds": 1.0,
+      "severity": "review"
+    },
+    {
+      "id": "safety_vest",
+      "name": "Safety-vest policy",
+      "type": "object_attribute",
+      "objects": [
+        "person"
+      ],
+      "zone": "construction_zone",
+      "attribute": {
+        "name": "safety_vest",
+        "expected": true
+      },
+      "duration_seconds": 1.0,
+      "severity": "review"
+    },
+    {
+      "id": "safety_vest_2",
+      "name": "Safety-vest policy",
+      "type": "object_attribute",
+      "objects": [
+        "person"
+      ],
+      "zone": "warehouse_floor",
+      "attribute": {
+        "name": "safety_vest",
+        "expected": true
+      },
+      "duration_seconds": 1.0,
+      "severity": "review"
+    }
+  ],
+  "needs": [
+    "person1-vision",
+    "gemini"
+  ],
+  "credits": [
+    "Pexels videos 5434220, 4281236 (Pexels License, free to use)"
+  ]
+}

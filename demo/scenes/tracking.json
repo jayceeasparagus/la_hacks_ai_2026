@@ -1,0 +1,58 @@
+{
+  "name": "Campus lobby: many people, no false alerts (Pexels footage)",
+  "description": "A busy lobby. Every person gets an anonymous track within this camera; people walking through must never trigger the left-bag rule.",
+  "policy": "Alert if a bag is left in the campus lobby for more than 10 seconds.",
+  "cameras": [
+    {
+      "id": "cam_campus",
+      "name": "Campus lobby",
+      "source": "clip:../../clips/pexels/campus_lobby_38469386.mp4"
+    }
+  ],
+  "zones": [
+    {
+      "id": "campus_lobby",
+      "camera_id": "cam_campus",
+      "name": "Campus lobby",
+      "polygon": [
+        [
+          0.02,
+          0.02
+        ],
+        [
+          0.98,
+          0.02
+        ],
+        [
+          0.98,
+          0.98
+        ],
+        [
+          0.02,
+          0.98
+        ]
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "unattended_bag",
+      "name": "Unattended bag",
+      "type": "persistent_object",
+      "objects": [
+        "backpack",
+        "handbag",
+        "suitcase"
+      ],
+      "zone": "campus_lobby",
+      "duration_seconds": 10.0,
+      "severity": "review"
+    }
+  ],
+  "needs": [
+    "person1-vision"
+  ],
+  "credits": [
+    "Pexels video 38469386 (Pexels License, free to use)"
+  ]
+}
