@@ -27,6 +27,8 @@ PERSON_QUESTIONS = {
 
 PERSON_PROMPT = """You are checking one person at a venue entrance for an operator-defined policy.
 The images are crops of the SAME person at different moments{closeups}.
+In each person crop, the person to check is outlined with a thin green box. Other people
+in the crop are not the subject: ignore their items.
 Answer each question only from what is visible. Do not guess: if the relevant part of the
 person is hidden, cut off, too small or blurry, answer "not_visible".
 Do not identify the person or describe their face, age, gender or ethnicity.

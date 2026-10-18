@@ -8,6 +8,7 @@ Per clip it writes <out>/<clip>/: zones.jpg, summary.json and one folder per req
 """
 
 import argparse
+import base64
 import html
 import json
 import time
@@ -93,12 +94,31 @@ h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:17px; margin:28px 0 6px; b
 .imgs figure { margin:0; } .imgs img { height:240px; border-radius:4px; display:block; } .imgs img.small { height:130px; }
 figcaption { font-size:11px; color:#9aa0a6; max-width:260px; } .tag { display:inline-block; padding:1px 7px; border-radius:10px; background:#2c3038; font-size:12px; margin-right:4px; }
 .tag.exit { background:#7a2d2d; } details { margin-top:6px; } pre { white-space:pre-wrap; background:#111316; padding:8px; border-radius:6px; font-size:12px; max-width:760px; }
-.zones img { max-width:min(640px, 100%); border-radius:6px; } a { color:#8ab4f8; }
+.zones img { max-width:min(640px, 100%); max-height:340px; border-radius:6px; } a { color:#8ab4f8; }
 """
 
 
-def build_viewer(out_root: Path) -> Path:
+def build_viewer(out_root: Path, portable: bool = False) -> Path:
+    """index.html links the image files next to it. portable=True writes portable.html with
+    downscaled images embedded, a single file small enough to send around (preview only)."""
     clips = sorted(p.parent for p in out_root.glob("*/summary.json"))
+
+    def src(rel: str, max_h: int) -> str:
+        if not portable:
+            return rel
+        img = cv2.imread(str(out_root / rel))
+        if img is None:
+            return ""
+        if img.shape[0] > max_h:
+            img = cv2.resize(img, (int(img.shape[1] * max_h / img.shape[0]), max_h), interpolation=cv2.INTER_AREA)
+        ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 72])
+        return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
+
+    def fig(rel: str, max_h: int, css: str, caption: str) -> str:
+        image = f"<img{css} src='{src(rel, max_h)}' loading='lazy'>"
+        linked = image if portable else f"<a href='{rel}'>{image}</a>"
+        return f"<figure>{linked}<figcaption>{caption}</figcaption></figure>"
+
     total_req = total_skip = 0
     rows, sections = [], []
     for clip_dir in clips:
@@ -124,10 +144,9 @@ def build_viewer(out_root: Path) -> Path:
                         extra.append(f"{k}={im[k]}")
                 if im.get("cut_off"):
                     extra.append("CUT OFF")
-                figs.append(f"<figure><a href='{c}/{rid}/{im['file']}'><img{small} src='{c}/{rid}/{im['file']}' loading='lazy'></a>"
-                            f"<figcaption>{html.escape(im['role'])} · {im['width']}×{im['height']}<br>{' '.join(extra)}</figcaption></figure>")
-            figs.append(f"<figure><a href='{c}/{rid}/context.jpg'><img class='small' src='{c}/{rid}/context.jpg' loading='lazy'></a>"
-                        f"<figcaption>context (yellow = this track)</figcaption></figure>")
+                figs.append(fig(f"{c}/{rid}/{im['file']}", 260 if not small else 160, small,
+                                f"{html.escape(im['role'])} · {im['width']}×{im['height']}<br>{' '.join(extra)}"))
+            figs.append(fig(f"{c}/{rid}/context.jpg", 220, " class='small'", "context (yellow = this track)"))
             v = r["visit"]
             if r["kind"] == "person_attributes":
                 head = (f"<span class='tag'>person #{r['track_id']}</span><span class='tag'>{r['trigger']}</span>"
@@ -143,7 +162,7 @@ def build_viewer(out_root: Path) -> Path:
         skipped = "".join(f"<li>#{k['track_id']} in {html.escape(k['zone'])}: {html.escape(k['reason'])}</li>" for k in s["skipped"])
         sections.append(
             f"<h2 id='{c}'>{c} <span class='muted'>· {s['clip_seconds']} s · {len(reqs)} request(s)</span></h2>"
-            f"<div class='zones'><p class='muted'>Zones: {zone_text}</p><img src='{c}/zones.jpg' loading='lazy'></div>"
+            f"<div class='zones'><p class='muted'>Zones: {zone_text}</p><img src='{src(f"{c}/zones.jpg", 340)}' loading='lazy'></div>"
             f"<div class='cards'>{''.join(cards) or '<p class=muted>No requests.</p>'}</div>"
             f"<details><summary>{len(s['skipped'])} visit(s) not sent, and why</summary><ul>{skipped}</ul></details>")
     page = (f"<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -151,10 +170,11 @@ def build_viewer(out_root: Path) -> Path:
             f"<h1>What would be sent to Gemini</h1>"
             f"<p class='muted'>No calls were made. Each card is one request: the images Gemini would receive, plus the prompt. "
             f"Person requests = one per person per visit to an entrance zone. Exit confirms = an object sat in an exit zone "
-            f"for 5 s. {total_req} requests, {total_skip} visits skipped, across {len(clips)} clips. Click any image for full size.</p>"
+            f"for 5 s. {total_req} requests, {total_skip} visits skipped, across {len(clips)} clips. "
+            f"{'Images are downscaled previews; full-size files are in clips/gemini_snapshots.' if portable else 'Click any image for full size.'}</p>"
             f"<table><tr><th>clip</th><th>length</th><th>person</th><th>exit</th><th>skipped</th></tr>{''.join(rows)}</table>"
             f"{''.join(sections)}</body></html>")
-    index = out_root / "index.html"
+    index = out_root / ("portable.html" if portable else "index.html")
     index.write_text(page, encoding="utf-8")
     return index
 
@@ -170,6 +190,8 @@ def main() -> None:
     for clip in args.clips:
         run_clip(Path(clip.removeprefix("clip:")), args.zones, args.out, args.imgsz)
     print(f"viewer: {build_viewer(args.out)}")
+    portable = build_viewer(args.out, portable=True)
+    print(f"portable: {portable} ({portable.stat().st_size / 1e6:.1f} MB)")
 
 
 if __name__ == "__main__":

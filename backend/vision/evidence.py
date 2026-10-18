@@ -31,7 +31,7 @@ MIN_PERSON_HEIGHT_PX = 60  # in the full-resolution frame; smaller crops are use
 EXIT_SECONDS = 5.0
 CROPS_PER_VISIT = 2
 MIN_CROP_GAP = 0.5  # seconds between the 2 kept crops, so they show different moments
-CARRIED_CLASSES = {"backpack", "handbag", "suitcase", "camera"}
+CARRIED_CLASSES = {"backpack", "handbag", "suitcase", "camera", "chair"}  # chair: YOLO sometimes calls a held suitcase a chair
 OBJECT_CLASSES = {"backpack", "handbag", "suitcase", "chair"}  # timed in exit zones
 ATTACH_OVERLAP = 0.5  # share of an object's box inside a person's box to count as carried
 MIN_ATTACHED_FRAMES = 3  # a carried-object close-up needs this many sightings (drops 1-frame flickers)
@@ -53,14 +53,19 @@ def iou(a, b) -> float:
     return inter / union if union > 0 else 0.0
 
 
-def crop_full(full: np.ndarray, bbox, pad: float = 0.15, max_side: int = 768) -> np.ndarray:
-    """Padded crop from the full-resolution frame, downscaled so the long side <= max_side."""
+def crop_full(full: np.ndarray, bbox, pad: float = 0.15, max_side: int = 768, outline: bool = False) -> np.ndarray:
+    """Padded crop from the full-resolution frame, downscaled so the long side <= max_side.
+    outline=True draws a thin green box around bbox so Gemini knows who the subject is in a crowd."""
     h, w = full.shape[:2]
     x1, y1, x2, y2 = bbox
     px, py = (x2 - x1) * pad, (y2 - y1) * pad
     left, top = max(0, int((x1 - px) * w)), max(0, int((y1 - py) * h))
     right, bottom = min(w, int((x2 + px) * w)), min(h, int((y2 + py) * h))
     out = full[top:bottom, left:right]
+    if outline and out.size:
+        out = out.copy()
+        t = max(2, (bottom - top) // 200)
+        cv2.rectangle(out, (int(x1 * w) - left, int(y1 * h) - top), (int(x2 * w) - left, int(y2 * h) - top), (0, 255, 0), t)
     scale = max_side / max(out.shape[:2]) if out.size else 1.0
     if scale < 1.0:
         out = cv2.resize(out, (int(out.shape[1] * scale), int(out.shape[0] * scale)), interpolation=cv2.INTER_AREA)
@@ -207,8 +212,8 @@ class EvidenceCollector:
         if len(v.candidates) >= CROPS_PER_VISIT and pre <= worst:
             pass
         else:
-            crop = crop_full(full, p.bbox)
-            sharp = sharpness(crop)
+            sharp = sharpness(crop_full(full, p.bbox, pad=0.0))  # measure sharpness on the person, without the outline
+            crop = crop_full(full, p.bbox, outline=True)
             score = 0.5 * min(height_px, 600) / 600 + 0.3 * min(sharp / 300, 1.0) + (0.0 if cut else 0.2) - 0.3 * overlap
             cand = Candidate(tf.ts, tf.frame_index, list(p.bbox), crop, round(score, 3),
                              {"height_px": int(height_px), "sharpness": int(sharp), "cut_off": cut,
