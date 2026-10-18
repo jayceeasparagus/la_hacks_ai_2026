@@ -11,6 +11,7 @@ import hashlib
 import logging
 import os
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
@@ -55,7 +56,7 @@ def _label(image: np.ndarray, text: str, x: int, y: int, color) -> int:
     return th + base + 4
 
 
-def annotate_alert(frame: np.ndarray, alert: Alert) -> np.ndarray:
+def annotate_alert(frame: np.ndarray, alert: Alert, snapshot_ts: float | None = None) -> np.ndarray:
     """A copy of the frame with the alert's box, title and '<class> #<id>' tag.
 
     Drawn here rather than with vision.annotate so app/ does not depend on vision/;
@@ -68,7 +69,8 @@ def annotate_alert(frame: np.ndarray, alert: Alert) -> np.ndarray:
     p1, p2 = (int(x1 * w), int(y1 * h)), (int(x2 * w), int(y2 * h))
     cv2.rectangle(out, p1, p2, color, 2, cv2.LINE_AA)
     height = _label(out, alert.title, p1[0], p1[1], color)
-    tag = f'{alert.object_class} #{alert.track_id}'
+    source_ts = alert.ts if snapshot_ts is None else snapshot_ts
+    tag = f'{alert.camera_id} | source {source_ts:.2f}s | {alert.object_class} #{alert.track_id}'
     _label(out, tag, p1[0], max(p1[1], height) + height, (60, 60, 60))
     return out
 
@@ -89,7 +91,10 @@ def _resampled(frames: list[tuple[float, np.ndarray]]) -> tuple[list[np.ndarray]
 
 
 class EvidenceWriter:
-    def __init__(self, directory: Path, max_workers: int = 2, clip_seconds: float = 4.0):
+    def __init__(self, directory: Path, max_workers: int = 2, clip_seconds: float = 4.0, max_pending: int = 4):
+        if min(max_workers, max_pending, clip_seconds) <= 0:
+            raise ValueError("Evidence limits must be positive")
+        self._slots = threading.BoundedSemaphore(max_pending)
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.clip_seconds = clip_seconds
@@ -97,7 +102,7 @@ class EvidenceWriter:
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='evidence')
 
     def submit(self, alert: Alert, frame: np.ndarray | None, recent: list[tuple[float, np.ndarray]] | None,
-               on_done: Callable[[Alert], None]) -> Alert:
+               on_done: Callable[[Alert], None], *, snapshot_ts: float | None = None) -> Alert:
         """Return the alert to store and broadcast right away: evidence_status 'pending' if frame is not None,
         else 'unavailable' (and on_done is never called). In the background write <name>.jpg (the frame with the
         alert bbox, a label with alert.title and object_class drawn) and, if `recent` has >= 2 frames, <name>.mp4
@@ -107,21 +112,23 @@ class EvidenceWriter:
         """
         unavailable = alert.model_copy(update={'evidence_status': 'unavailable',
                                                'evidence_image_url': None, 'evidence_clip_url': None})
-        if frame is None:
+        if frame is None or not self._slots.acquire(blocking=False):
             return unavailable
         pending = alert.model_copy(update={'evidence_status': 'pending',
                                            'evidence_image_url': None, 'evidence_clip_url': None})
         try:
-            self._pool.submit(self._work, pending, np.array(frame, copy=True), list(recent or []), on_done)
+            future = self._pool.submit(self._work, pending, np.array(frame, copy=True), list(recent or []), on_done, snapshot_ts)
+            future.add_done_callback(lambda _: self._slots.release())
         except Exception:
+            self._slots.release()
             log.exception('Evidence for %s could not be queued', alert.id)
             return unavailable
         return pending
 
-    def _work(self, alert: Alert, frame: np.ndarray, recent: list, on_done) -> None:
+    def _work(self, alert: Alert, frame: np.ndarray, recent: list, on_done, snapshot_ts=None) -> None:
         try:
             name = safe_name(alert.id)
-            self._write_image(name, annotate_alert(frame, alert))
+            self._write_image(name, annotate_alert(frame, alert, snapshot_ts))
             clip_url = None
             if len(recent) >= 2:
                 try:

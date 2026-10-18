@@ -22,7 +22,8 @@ from app.models import Alert, Camera, Rule, RuleState, TrackFrame, Zone
 from app.render import annotate, encode_jpeg
 from app.settings import MAX_CAMERAS
 from app.sources import SourceError, build_source
-from engine.engine import RuleEngine
+from engine.engine import RuleEngine, _default_verifier
+from engine.verification import VerificationScheduler
 from store.db import AlertStore
 
 log = logging.getLogger('policylens.workers')
@@ -48,13 +49,15 @@ def _safe_error(error: BaseException) -> str:
 class CameraWorker(threading.Thread):
     def __init__(self, camera: Camera, zones: list[Zone], rules: list[Rule], *,
                  source_factory: SourceFactory, store: AlertStore, evidence: EvidenceWriter,
-                 publish: Publish, verifier=None, rebuild_seconds: float = REBUILD_SECONDS):
+                 publish: Publish, verifier=None, scheduler=None, rebuild_seconds: float = REBUILD_SECONDS):
         super().__init__(name=f'camera-{camera.id}', daemon=True)
         self.camera = camera
         self.camera_id = camera.id
         self.zones = [zone for zone in zones if zone.camera_id == camera.id]
         self.rule_names = {rule.id: rule.name for rule in rules}
-        self.engine = RuleEngine(camera.id, zones, rules, verifier=verifier)
+        self.engine = RuleEngine(camera.id, zones, rules, verifier=verifier, scheduler=scheduler)
+        self._engine_lock = threading.RLock()
+        self._source_offline = False
         self.adapter = ContractAdapter(camera.id)
         self.source_factory = source_factory
         self.store = store
@@ -152,7 +155,8 @@ class CameraWorker(threading.Thread):
 
     def close(self) -> None:
         try:
-            self.engine.close()
+            with self._engine_lock:
+                self.engine.close()
         except Exception:
             log.exception('[%s] engine close failed', self.camera_id)
 
@@ -167,8 +171,9 @@ class CameraWorker(threading.Thread):
                     self._state = 'active'
                 if self._stopping.is_set():
                     break
-                self.adapter.reset()
-                self.engine.reset()
+                with self._engine_lock:
+                    self.adapter.reset()
+                    self.engine.reset()
                 for image, raw in source.frames():
                     if self._stopping.is_set():
                         break
@@ -176,6 +181,9 @@ class CameraWorker(threading.Thread):
                 if self._stopping.is_set():
                     break
                 if getattr(source, 'ended', False):
+                    with self._engine_lock:
+                        for alert in self.engine.drain(timeout=5):
+                            self._handle_alert(alert, time.monotonic())
                     self._set_state('offline', getattr(source, 'error', None) or 'source ended')
                     log.info('[%s] source ended: %s', self.camera_id, self._error)
                     self._publish_rule_states([], force=True)
@@ -199,14 +207,42 @@ class CameraWorker(threading.Thread):
             self._set_state('offline', error)
             self._publish_rule_states([], force=True)
             try:
-                self.engine.reset()
+                with self._engine_lock:
+                    self.engine.reset()
             except Exception:
                 log.exception('[%s] engine reset failed', self.camera_id)
             self._stopping.wait(self.rebuild_seconds)
 
     # Per frame ----------------------------------------------------------------------
 
+    def poll_pending(self, status):
+        # Poll even when a camera is blocked waiting for its next frame.
+        if not self._engine_lock.acquire(blocking=False):
+            return
+        try:
+            if self.source is not None:
+                status = self.status()
+            if status['status'] == 'offline' and not self._source_offline:
+                self.engine.reset()
+                self.adapter.reset()
+                self._source_offline = True
+                with self._lock:
+                    self._last_frame_ts = None
+                self._publish_rule_states([], force=True)
+            elif status['status'] == 'online':
+                self._source_offline = False
+            if status['status'] == 'online':
+                for alert in self.engine.poll_verifications():
+                    self._handle_alert(alert, time.monotonic())
+                self._publish_rule_states(self.engine.snapshot_states())
+        finally:
+            self._engine_lock.release()
+
     def _process(self, image, raw) -> None:
+        with self._engine_lock:
+            self._process_locked(image, raw)
+
+    def _process_locked(self, image, raw) -> None:
         received = time.monotonic()
         try:
             tf, restarted = self.adapter.convert(raw)
@@ -260,14 +296,10 @@ class CameraWorker(threading.Thread):
 
     def _handle_alert(self, alert: Alert, received: float) -> None:
         frame = self.engine.pop_alert_frame(alert.id)
-        source = self.source
-        try:
-            recent = source.recent_frames(4.0) if source is not None else []
-        except Exception:
-            log.exception('[%s] recent_frames failed; evidence without a clip', self.camera_id)
-            recent = []
+        recent = self.engine.pop_alert_clip(alert.id)
+        snapshot_ts = self.engine.pop_alert_frame_ts(alert.id)
         with self._alert_lock:
-            alert = self.evidence.submit(alert, frame, recent, on_done=self._evidence_done)
+            alert = self.evidence.submit(alert, frame, recent, on_done=self._evidence_done, snapshot_ts=snapshot_ts)
             if not self.store.add(alert):
                 log.warning('[%s] duplicate alert id %s ignored', self.camera_id, alert.id)
                 return
@@ -296,6 +328,7 @@ class MonitorManager:
         self.verifier = verifier
         self.source_factory = source_factory
         self.rebuild_seconds = rebuild_seconds
+        self.scheduler = None
         self.workers: dict[str, CameraWorker] = {}
         self.running = False
         self._lock = threading.RLock()
@@ -307,6 +340,10 @@ class MonitorManager:
         with self._lock:
             if self.running:
                 return True
+            if any(worker.is_alive() for worker in self.workers.values()):
+                raise ValueError('Previous camera workers are still stopping')
+            if self.scheduler is None:
+                self.scheduler = VerificationScheduler(self.verifier or _default_verifier)
             cameras = self.settings.cameras()[:MAX_CAMERAS]
             zones, rules = self.settings.zones(), self.settings.rules()
             multi = len(cameras) > 1
@@ -316,7 +353,7 @@ class MonitorManager:
                 for camera in cameras:
                     workers[camera.id] = CameraWorker(
                         camera, zones, rules, source_factory=factory, store=self.store,
-                        evidence=self.evidence, publish=self.publish, verifier=self.verifier,
+                        evidence=self.evidence, publish=self.publish, verifier=self.verifier, scheduler=self.scheduler,
                         rebuild_seconds=self.rebuild_seconds)
             except Exception:
                 for worker in workers.values():
@@ -339,7 +376,7 @@ class MonitorManager:
         with self._lock:
             if not self.running:
                 return False
-            workers, self.workers = self.workers, {}
+            workers = self.workers
             self.running = False
             self._monitor_stop.set()
             for worker in workers.values():
@@ -353,6 +390,7 @@ class MonitorManager:
             if self._monitor is not None:
                 self._monitor.join(1.0)
                 self._monitor = None
+            self.workers = {key: worker for key, worker in workers.items() if worker.is_alive()}
             log.info('Monitoring stopped')
         self.publish('monitor_status', {'running': False})
         for status in self.statuses():
@@ -360,6 +398,12 @@ class MonitorManager:
         for camera_id in workers:
             self.publish('state', {'camera_id': camera_id, 'ts': 0.0, 'rule_states': []})
         return True
+
+    def close(self):
+        self.stop()
+        if self.scheduler is not None:
+            self.scheduler.close(wait=False)
+            self.scheduler = None
 
     def worker(self, camera_id: str) -> CameraWorker | None:
         return self.workers.get(camera_id)
@@ -391,6 +435,7 @@ class MonitorManager:
             for worker in list(self.workers.values()):
                 try:
                     status = worker.status()
+                    worker.poll_pending(status)
                     key = (status['status'], status['error'])
                     now = time.monotonic()
                     fps_sent, fps_at = last_fps.get(worker.camera_id, (-1.0, 0.0))

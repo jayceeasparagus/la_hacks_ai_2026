@@ -8,6 +8,7 @@ from collections import OrderedDict
 from concurrent.futures import (FIRST_COMPLETED, CancelledError, Executor, Future,
                                 ThreadPoolExecutor, wait)
 from dataclasses import dataclass
+import logging
 import threading
 import time
 from typing import TYPE_CHECKING, Callable
@@ -21,6 +22,8 @@ from verify.prompts import CHECK_FOR_ATTRIBUTE
 
 if TYPE_CHECKING:
     import numpy as np
+
+log = logging.getLogger('policylens.engine')
 
 BUSY_REASON = 'verification busy'
 BUSY_RETRY_SECONDS = 1.0
@@ -68,6 +71,7 @@ class _Incident:
     observations: int = 0
     best_score: float = -1
     best_track: Track | None = None
+    best_ts: float = 0
     best_frame: 'np.ndarray | None' = None
 
     def restart(self, entered: float | None) -> None:
@@ -88,6 +92,9 @@ class _Job:
     session_id: str
     crop: 'np.ndarray | None'
     check: str
+    ticket: object = None
+    threshold_ts: float = 0
+    evidence_frames: object = None
     future: Future | None = None
     retries: int = 0
     retry_at: float = 0
@@ -107,13 +114,21 @@ class RuleEngine:
                  clock: Callable[[], str] = utc_now,
                  verifier: Callable[['np.ndarray | None', str], Verdict] | None = None,
                  executor: Executor | None = None,
-                 monotonic: Callable[[], float] = time.monotonic):
+                 monotonic: Callable[[], float] = time.monotonic,
+                 scheduler=None, evidence_writer=None):
         if not camera_id:
             raise ValueError('camera_id is required')
         if len({zone.id for zone in zones}) != len(zones):
             raise ValueError('Zone IDs must be unique')
         if len({rule.id for rule in rules}) != len(rules):
             raise ValueError('Rule IDs must be unique')
+        if scheduler is not None and executor is not None:
+            raise ValueError("Choose scheduler or executor")
+        self.scheduler = scheduler
+        self.evidence_writer = evidence_writer
+        self._evidence_jobs = {}
+        from engine.evidence import FrameBuffer
+        self._buffer = FrameBuffer()
         self.camera_id = camera_id
         self.zones = {zone.id: zone.model_copy(deep=True) for zone in zones}
         self.rules = []
@@ -133,6 +148,8 @@ class RuleEngine:
         self._owns_executor = executor is None
         self._jobs: list[_Job] = []
         self._alert_frames: OrderedDict[str, 'np.ndarray'] = OrderedDict()
+        self._alert_clips = OrderedDict()
+        self._alert_frame_times = {}
         self._frames_lock = threading.Lock()
         self._incidents: dict[tuple[str, int], _Incident] = {}
         self._sequence = 0
@@ -144,6 +161,8 @@ class RuleEngine:
         Pending verifications are abandoned, so their results never alert.
         """
         self._abandon_jobs()
+        if self._buffer is not None:
+            self._buffer.clear()
         self._incidents.clear()
         self._sequence = 0
         self._last_ts = None
@@ -165,6 +184,15 @@ class RuleEngine:
         with self._frames_lock:
             return self._alert_frames.pop(alert_id, None)
 
+    def pop_alert_frame_ts(self, alert_id):
+        with self._frames_lock:
+            return self._alert_frame_times.pop(alert_id, None)
+
+    def pop_alert_clip(self, alert_id):
+        """Bounded source frames frozen when the alert first became due."""
+        with self._frames_lock:
+            return self._alert_clips.pop(alert_id, [])
+
     def drain(self, timeout: float = 10.0) -> list[Alert]:
         """Wait up to `timeout` wall seconds for pending verifications.
 
@@ -178,6 +206,7 @@ class RuleEngine:
             remaining = deadline - time.monotonic()
             if not self._jobs or remaining <= 0:
                 return alerts
+            remaining = min(remaining, 0.02)
             running = [job.future for job in self._jobs if job.future is not None]
             if len(running) < len(self._jobs):  # some jobs wait to retry
                 remaining = min(remaining, 0.05)
@@ -187,18 +216,27 @@ class RuleEngine:
                 time.sleep(remaining)
 
     def _abandon_jobs(self) -> None:
+        if self.scheduler is not None:
+            self.scheduler.cancel_session(self.camera_id, self.session_id)
         for job in self._jobs:
             if job.future is not None:
                 job.future.cancel()
         self._jobs.clear()
 
-    def _remember_frame(self, alert_id: str, frame) -> None:
+    def _remember_frame(self, alert_id: str, frame, recent=None, snapshot_ts=None) -> None:
         if frame is None:
             return
         with self._frames_lock:
             self._alert_frames[alert_id] = frame
+            self._alert_frame_times[alert_id] = self._last_ts if snapshot_ts is None else snapshot_ts
+            self._alert_clips[alert_id] = self._buffer.snapshot(self._last_ts) if recent is None else recent
+            while len(self._alert_clips) > MAX_ALERT_FRAMES:
+                old_id, _ = self._alert_clips.popitem(last=False)
+                self._alert_frame_times.pop(old_id, None)
             while len(self._alert_frames) > MAX_ALERT_FRAMES:
-                self._alert_frames.popitem(last=False)
+                old_id, _ = self._alert_frames.popitem(last=False)
+                self._alert_clips.pop(old_id, None)
+                self._alert_frame_times.pop(old_id, None)
 
     def _new_incident(self, rule: Rule, track: Track, ts: float) -> _Incident:
         self._sequence += 1
@@ -216,6 +254,15 @@ class RuleEngine:
         )
 
     def _submit(self, job: _Job) -> None:
+        if self.scheduler is not None:
+            job.ticket = self.scheduler.submit(
+                (self.camera_id, self.session_id, job.check, job.incident.id), job.crop, job.check)
+            if job.ticket is None:
+                job.future = Future()
+                job.future.set_result(Verdict(answer=None, confidence=0, reason=BUSY_REASON))
+            else:
+                job.future = job.ticket.future
+            return
         if self._executor is None:
             self._executor = ThreadPoolExecutor(
                 max_workers=4, thread_name_prefix=f'verify-{self.camera_id}')
@@ -230,7 +277,9 @@ class RuleEngine:
                  else crop(incident.best_frame, incident.best_track.bbox))
         job = _Job(rule=rule, incident=incident, zone_name=zone_name,
                    session_id=self.session_id, crop=image,
-                   check=CHECK_FOR_ATTRIBUTE[rule.attribute.name])
+                   check=CHECK_FOR_ATTRIBUTE[rule.attribute.name],
+                   threshold_ts=self._last_ts,
+                   evidence_frames=self._buffer.snapshot(self._last_ts) if self._buffer else [])
         self._submit(job)
         self._jobs.append(job)
 
@@ -246,10 +295,15 @@ class RuleEngine:
                 if now < job.retry_at:
                     continue
                 self._submit(job)
-            if not job.future.done():
+            if job.ticket is not None:
+                verdict = self.scheduler.poll(job.ticket)
+                if verdict is None:
+                    continue
+            elif not job.future.done():
                 continue
             try:
-                verdict = Verdict.model_validate(job.future.result(), from_attributes=True)
+                if job.ticket is None:
+                    verdict = Verdict.model_validate(job.future.result(), from_attributes=True)
             except (Exception, CancelledError):
                 verdict = UNAVAILABLE
             if (verdict.answer is None and verdict.reason == BUSY_REASON
@@ -257,6 +311,7 @@ class RuleEngine:
                 job.retries += 1
                 job.retry_at = now + BUSY_RETRY_SECONDS
                 job.future = None
+                job.ticket = None
                 continue
             self._jobs.remove(job)
             alert = self._resolve(job, verdict, ts)
@@ -266,6 +321,8 @@ class RuleEngine:
 
     def _resolve(self, job: _Job, verdict: Verdict, ts: float) -> Alert | None:
         incident, rule = job.incident, job.rule
+        if self.scheduler is not None:
+            ts = job.threshold_ts
         frame, incident.best_frame = incident.best_frame, None
         if verdict.answer is not None and verdict.answer == rule.attribute.expected:
             incident.phase = 'compliant'
@@ -277,7 +334,8 @@ class RuleEngine:
             track=incident.best_track, ts=ts, elapsed=max(0, ts - incident.entered),
             verdict=verdict, zone_name=job.zone_name, created_at=self.clock(),
         )
-        self._remember_frame(alert.id, frame)
+        self._remember_frame(alert.id, frame, job.evidence_frames, incident.best_ts)
+        self._capture_evidence(alert, frame, incident.best_ts, job.evidence_frames)
         return alert
 
     def update(self, frame, tf: TrackFrame) -> tuple[list[RuleState], list[Alert]]:
@@ -292,6 +350,8 @@ class RuleEngine:
         if self._last_ts is not None and tf.ts <= self._last_ts:
             raise ValueError('Timestamps must strictly increase; reset before rewind')
         self._last_ts = tf.ts
+        if self._buffer is not None:
+            self._buffer.remember(frame, tf.ts)
         states, alerts = [], self._poll(tf.ts)
         all_tracks = {track.track_id: track for track in tf.tracks}
         for rule in self.rules:
@@ -357,6 +417,7 @@ class RuleEngine:
                     if score > incident.best_score:
                         incident.best_score = score
                         incident.best_track = track
+                        incident.best_ts = tf.ts
                         incident.best_frame = None if frame is None else frame.copy()
                 elapsed = tf.ts - incident.entered
                 if incident.phase == 'timing' and elapsed >= rule.duration_seconds - 1e-9:
@@ -372,6 +433,7 @@ class RuleEngine:
                             zone_name=zone.name, created_at=self.clock(),
                         )
                         self._remember_frame(alert.id, None if frame is None else frame.copy())
+                        self._capture_evidence(alert, frame, tf.ts)
                         alerts.append(alert)
                 states.append(self._state(rule, incident, tf.ts, incident.phase))
 
@@ -389,3 +451,58 @@ class RuleEngine:
                 elif incident.phase == 'timing':
                     incident.restart(None)
         return states, alerts
+
+    def _capture_evidence(self, alert, image, snapshot_ts, frames=None):
+        if self.evidence_writer is None:
+            return
+        if frames is None:
+            frames = self._buffer.snapshot(alert.ts)
+        try:
+            ticket = self.evidence_writer.submit(alert, image, frames, snapshot_ts=snapshot_ts)
+        except Exception:
+            log.warning('Evidence submission failed camera=%s alert=%s', self.camera_id, alert.id)
+            return
+        if ticket is not None:
+            alert.evidence_status = 'pending'
+            self._evidence_jobs[alert.id] = ticket
+        else:
+            log.warning('Evidence queue full or image unavailable camera=%s alert=%s',
+                        self.camera_id, alert.id)
+
+    def poll_evidence(self):
+        """Return completed evidence patches, not duplicate new alerts.
+
+        The app should apply each patch to its latest stored alert and broadcast
+        alert_updated. A shared writer cannot steal another camera's results.
+        """
+        results = []
+        for alert_id, ticket in list(self._evidence_jobs.items()):
+            result = self.evidence_writer.poll(ticket)
+            if result is not None:
+                results.append(result)
+                del self._evidence_jobs[alert_id]
+        return results
+
+    def drain_evidence(self, timeout=10):
+        """Blocking EOF/shutdown helper; live workers use poll_evidence instead."""
+        deadline = time.monotonic() + timeout
+        results = []
+        while self._evidence_jobs:
+            results.extend(self.poll_evidence())
+            if not self._evidence_jobs:
+                break
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Evidence drain timed out')
+            time.sleep(0.002)
+        return results
+
+    def poll_verifications(self):
+        return self._poll(self._last_ts or 0.0)
+
+    def drain_verifications(self, timeout=5):
+        return self.drain(timeout)
+
+    def snapshot_states(self):
+        return [self._state(rule, incident, self._last_ts or 0.0, incident.phase)
+                for rule in self.rules for key, incident in self._incidents.items()
+                if key[0] == rule.id]

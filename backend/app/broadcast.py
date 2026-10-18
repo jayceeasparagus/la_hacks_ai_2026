@@ -3,7 +3,7 @@
 `publish` may be called from any thread. The message is serialized in the caller's
 thread and handed to the event loop with call_soon_threadsafe. Each client has a
 bounded queue; when it is full the oldest `state` message is dropped first, then
-the oldest message of any type, so a slow client only loses its own updates.
+a client that would lose an alert is closed with 1013 so it can reload REST state.
 """
 
 from __future__ import annotations
@@ -38,15 +38,20 @@ class _Client:
         self.queue: deque[tuple[str, str]] = deque()  # (type, json text)
         self.ready = asyncio.Event()
         self.dropped = 0
+        self.overflow = False
 
     def put(self, kind: str, text: str) -> None:
+        if self.overflow:
+            return
         if len(self.queue) >= self.size:
             for index, (queued_kind, _) in enumerate(self.queue):
                 if queued_kind == 'state':
                     del self.queue[index]
                     break
             else:
-                self.queue.popleft()
+                self.overflow = True
+                self.ready.set()
+                return
             self.dropped += 1
         self.queue.append((kind, text))
         self.ready.set()
@@ -124,6 +129,9 @@ class Broadcaster:
     async def _send_loop(self, client: _Client) -> None:
         while True:
             await client.ready.wait()
+            if client.overflow:
+                await client.websocket.close(code=1013, reason='Reload alerts and reconnect')
+                return
             while client.queue:
                 _, text = client.queue.popleft()
                 await client.websocket.send_text(text)

@@ -89,8 +89,10 @@ class AlertStore:
             stored = self._get(alert.id)
             if stored is None:
                 return None
-            merged = alert.model_copy(update={'status': stored.status, 'decision': stored.decision,
-                                              'decided_at': stored.decided_at})
+            merged = stored.model_copy(update={
+                'evidence_status': alert.evidence_status,
+                'evidence_image_url': alert.evidence_image_url,
+                'evidence_clip_url': alert.evidence_clip_url})
             self._save(merged)
             return merged
 

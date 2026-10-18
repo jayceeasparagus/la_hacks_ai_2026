@@ -104,7 +104,7 @@ def run_case(row: dict, base: Path) -> dict:
                         session_id=f'eval-{row["case"]}')
     alerts, started = [], time.monotonic()
     for image, tf, restarted in frames:
-        if restarted and alerts:
+        if restarted:
             engine.reset()
         alerts += engine.update(image, tf)[1]
     alerts += engine.drain()

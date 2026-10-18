@@ -144,7 +144,7 @@ def create_app(data_dir: Path | None = None, *, verifier=None, source_factory=No
         try:
             yield
         finally:
-            await asyncio.to_thread(manager.stop)
+            await asyncio.to_thread(manager.close)
             broadcaster.unbind()
             await asyncio.to_thread(evidence.shutdown, True)
             store.close()
@@ -161,11 +161,13 @@ def create_app(data_dir: Path | None = None, *, verifier=None, source_factory=No
             raise HTTPException(409, 'Stop monitoring before changing the configuration')
 
     def save(request: Request, saver, items):
-        require_stopped(request)
-        try:
-            return saver(items)
-        except SettingsError as error:
-            raise HTTPException(settings_status(error), str(error)) from error
+        # Serialize configuration writes with monitor startup.
+        with state(request).manager._lock:
+            require_stopped(request)
+            try:
+                return saver(items)
+            except SettingsError as error:
+                raise HTTPException(settings_status(error), str(error)) from error
 
     def read(getter):
         try:
