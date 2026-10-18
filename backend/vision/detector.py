@@ -28,6 +28,7 @@ from ultralytics import YOLO  # noqa: E402
 from vision.capture import SINGLE_CAMERA_SIZE, Capture
 
 WEIGHTS = Path(__file__).parent / "weights" / "yolov8s-worldv2.pt"
+TRACKER_CFG = Path(__file__).parent / "bytetrack.yaml"
 
 # prompt given to YOLO-World -> class name used by the rest of the system
 PROMPTS = {
@@ -90,6 +91,22 @@ class Detector:
                                     device=self.device, verbose=False)[0]
         return self.to_detections(result)
 
+    def track(self, image: np.ndarray) -> list[Detection]:
+        """Detect and track with ByteTrack. Ids persist across calls on this Detector.
+
+        The tracker sees boxes down to its low threshold (0.1) so it can keep
+        tracks alive through weak frames; per-class thresholds apply afterwards.
+        """
+        result = self.model.track(image, persist=True, tracker=str(TRACKER_CFG), conf=0.1,
+                                  imgsz=self.imgsz, device=self.device, verbose=False)[0]
+        return [d for d in self.to_detections(result) if d.track_id is not None]
+
+    def reset_tracker(self) -> None:
+        """Forget all tracks, e.g. before replaying a clip from the start."""
+        predictor = self.model.predictor
+        for tracker in getattr(predictor, "trackers", None) or []:
+            tracker.reset()
+
     def to_detections(self, result) -> list[Detection]:
         """Convert one ultralytics result (predict or track) to filtered Detections."""
         boxes = result.boxes
@@ -132,6 +149,7 @@ def main() -> None:
     parser.add_argument("--device", default=None, help="cuda, mps or cpu (default: auto)")
     parser.add_argument("--camera-prompt", default=None,
                         help='replace the "camera" prompt, e.g. "DSLR camera" or "video camera"')
+    parser.add_argument("--track", action="store_true", help="track with ByteTrack and report track ids")
     parser.add_argument("--show", action="store_true", help="show boxes in a window (q to quit)")
     args = parser.parse_args()
 
@@ -144,6 +162,7 @@ def main() -> None:
     print(f"device={detector.device} imgsz={args.imgsz} prompts={list(prompts)}")
 
     counts, frames_with = Counter(), Counter()
+    tracks: dict[int, dict] = {}  # track_id -> cls, first, last, seen
     frames, infer_total, start = 0, 0.0, None
     with Capture(args.source, width=args.width) as cap:
         while True:
@@ -156,11 +175,15 @@ def main() -> None:
             if cap.kind != "clip" and time.monotonic() - start > args.seconds:
                 break
             t0 = time.perf_counter()
-            detections = detector.detect(frame.image)
+            detections = detector.track(frame.image) if args.track else detector.detect(frame.image)
             infer_total += time.perf_counter() - t0
             frames += 1
             counts.update(d.cls for d in detections)
             frames_with.update({d.cls for d in detections})
+            for d in detections:
+                if d.track_id is not None:
+                    t = tracks.setdefault(d.track_id, {"cls": d.cls, "first": frames, "last": frames, "seen": 0})
+                    t["last"], t["seen"] = frames, t["seen"] + 1
             if args.show:
                 cv2.imshow("detector", draw_detections(frame.image, detections))
                 if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -175,6 +198,14 @@ def main() -> None:
     print(f"{frames} frames, {frames / elapsed:.1f} fps end to end, {1000 * infer_total / frames:.0f} ms per inference")
     for cls in PROMPTS:
         print(f"  {cls:9s} {counts[cls]:6d} detections in {frames_with[cls]:5d} frames")
+    if args.track:
+        print("tracks (frames are 1-based; seen = frames the id was reported):")
+        for cls in PROMPTS:
+            ids = sorted((t for t in tracks.items() if t[1]["cls"] == cls), key=lambda t: -t[1]["seen"])
+            if not ids:
+                continue
+            longest = ", ".join(f"#{i} {t['first']}-{t['last']} seen {t['seen']}" for i, t in ids[:4])
+            print(f"  {cls:9s} {len(ids):3d} unique ids; longest: {longest}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,13 @@
+# ByteTrack settings for PolicyLens (ultralytics defaults except track_buffer).
+# Detections reach the tracker at conf >= track_low_thresh; per-class
+# thresholds in detector.CONFIDENCE are applied after tracking.
+
+tracker_type: bytetrack
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+# Lost tracks live this many frames (scaled to 30 fps). 60 = ~2 s, so a bag
+# keeps its id when someone walks in front of it.
+track_buffer: 60
+match_thresh: 0.8
+fuse_score: True
