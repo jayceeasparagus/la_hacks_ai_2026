@@ -116,7 +116,8 @@ class RuleEngine:
     Configuration is copied so editing a caller's models cannot mutate a live rule.
     Attribute verdicts arrive asynchronously; `update()` polls them and `drain()`
     waits for the rest. `verdict_lookup(track_id, check)` may answer a check from a
-    cache of known verdicts (demo footage) before any crop is sent to the verifier.
+    cache of known verdicts (demo footage) before any crop is sent to the verifier;
+    `on_verdict(track_id, check, verdict)` hears every answer that settles a check.
     """
 
     def __init__(self, camera_id: str, zones: list[Zone], rules: list[Rule], *,
@@ -126,7 +127,8 @@ class RuleEngine:
                  executor: Executor | None = None,
                  monotonic: Callable[[], float] = time.monotonic,
                  scheduler=None, evidence_writer=None,
-                 verdict_lookup: Callable[[int, str], Verdict | None] | None = None):
+                 verdict_lookup: Callable[[int, str], Verdict | None] | None = None,
+                 on_verdict: Callable[[int, str, Verdict], None] | None = None):
         if not camera_id:
             raise ValueError('camera_id is required')
         if len({zone.id for zone in zones}) != len(zones):
@@ -148,6 +150,7 @@ class RuleEngine:
         # Alerts name the zone, except when it is the whole frame (the camera is judged as a whole).
         self._places = {zone.id: None if is_whole_frame(zone.polygon) else zone.name for zone in zones}
         self.verdict_lookup = verdict_lookup
+        self.on_verdict = on_verdict
         for rule in rules:
             if rule.zone not in self.zones:
                 raise ValueError(f'Unknown zone: {rule.zone}')
@@ -345,6 +348,8 @@ class RuleEngine:
             ts = job.threshold_ts
         frame, incident.best_frame = incident.best_frame, None
         incident.verdict = verdict
+        if self.on_verdict is not None:
+            self.on_verdict(incident.best_track.track_id, job.check, verdict)
         if verdict.answer is not None and verdict.answer == rule.attribute.expected:
             incident.phase = 'compliant'
             return None

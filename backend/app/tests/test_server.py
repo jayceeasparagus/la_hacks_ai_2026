@@ -336,6 +336,38 @@ class LoopTests(ServerTestCase):
         wait_for(lambda: self.alerts()['total'] == 2, timeout=60)
 
 
+class LoopVerdictMemoryTests(unittest.TestCase):
+    def test_looping_camera_asks_the_verifier_once_per_track(self):
+        from app.models import Track, TrackFrame, Verdict
+        calls = []
+
+        def verifier(crop, check):
+            calls.append(check)
+            return Verdict(answer=False, confidence=0.9, reason='no hard hat')
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tracks = root / 'walk.tracks.jsonl'
+            person = Track(track_id=7, object_class='person', bbox=(0.4, 0.2, 0.6, 0.9), confidence=0.9)
+            frames = [TrackFrame(camera_id='cam_x', ts=i / 10, tracks=[person] if i < 20 else [])
+                      for i in range(40)]  # in view 2 s, then gone 2 s, so each loop is a new incident
+            tracks.write_text(''.join(tf.model_dump_json() + '\n' for tf in frames), encoding='utf-8')
+            with TestClient(create_app(root, verifier=verifier)) as c:
+                c.put('/api/cameras', json={'cameras': [{'id': 'cam_x', 'name': 'X', 'source': f'loop:{tracks}'}]})
+                c.put('/api/zones', json={'zones': [{'id': 'x_frame', 'camera_id': 'cam_x', 'name': 'X',
+                                                     'polygon': [[0, 0], [1, 0], [1, 1], [0, 1]]}]})
+                c.put('/api/policy', json={'rules': [{
+                    'id': 'hard_hat', 'name': 'Hard-hat policy', 'type': 'object_attribute', 'objects': ['person'],
+                    'zone': 'x_frame', 'attribute': {'name': 'hard_hat', 'expected': True},
+                    'duration_seconds': 1.0, 'severity': 'review'}]})
+                c.post('/api/monitor/start')
+                worker = c.app.state.manager.worker('cam_x')
+                wait_for(lambda: worker.frames_processed > 3 * len(frames), timeout=60)  # three loops
+                self.assertEqual(calls, ['hard_hat'])
+                self.assertEqual(c.get('/api/alerts').json()['total'], 1)
+                c.post('/api/monitor/stop')
+
+
 class VisionSourceTests(unittest.TestCase):
     def test_missing_vision_pipeline_is_reported(self):
         from app.sources import VISION_MISSING, SourceError, VisionSource

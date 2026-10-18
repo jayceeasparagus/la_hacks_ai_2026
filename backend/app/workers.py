@@ -9,7 +9,8 @@ changes, which also covers sources that block while their camera is offline.
 New rules can be swapped into running workers (`MonitorManager.apply_rules`): each
 camera keeps its source and starts a fresh engine session with the new rules.
 Looping demo sources replay the same objects, so they alert once per rule and track
-per applied policy instead of on every loop.
+per applied policy instead of on every loop, and a live verifier answer for a track is
+reused on later loops instead of asking Gemini again.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ import numpy as np
 
 from app.adapter import ContractAdapter
 from app.evidence import EvidenceWriter
-from app.models import Alert, Camera, Rule, RuleState, TrackFrame, Zone
+from app.models import Alert, Camera, Rule, RuleState, TrackFrame, Verdict, Zone
 from app.render import annotate, encode_jpeg
 from app.settings import MAX_CAMERAS
 from app.sources import SourceError, build_source
@@ -62,7 +63,10 @@ class CameraWorker(threading.Thread):
         self.camera_id = camera.id
         self.zones = [zone for zone in zones if zone.camera_id == camera.id]
         self._all_zones = zones
-        self._engine_options = {'verifier': verifier, 'scheduler': scheduler, 'verdict_lookup': verdict_lookup}
+        self._cached_lookup = verdict_lookup
+        self._learned: dict[tuple[int, str], Verdict] = {}  # live answers per (track, check), looping sources
+        self._engine_options = {'verifier': verifier, 'scheduler': scheduler,
+                                'verdict_lookup': self._lookup, 'on_verdict': self._learn}
         self.rules = {rule.id: rule for rule in rules}
         self.engine = RuleEngine(camera.id, zones, rules, **self._engine_options)
         self._alerted: set[tuple[str, int]] = set()  # (rule, track) already alerted, for looping sources
@@ -151,6 +155,19 @@ class CameraWorker(threading.Thread):
             with self._lock:
                 self._annotated_cache = (seq, data)
         return data
+
+    # Known verdicts ------------------------------------------------------------------------
+
+    def _lookup(self, track_id: int, check: str) -> Verdict | None:
+        known = self._cached_lookup(track_id, check) if self._cached_lookup is not None else None
+        if known is None and getattr(self.source, 'loops', False):
+            known = self._learned.get((track_id, check))
+        return known
+
+    def _learn(self, track_id: int, check: str, verdict: Verdict) -> None:
+        # A looping clip shows the same track again: keep clear answers, so Gemini sees each person once.
+        if verdict.answer is not None and getattr(self.source, 'loops', False):
+            self._learned[(track_id, check)] = verdict
 
     # Lifecycle ---------------------------------------------------------------------------
 

@@ -9,7 +9,7 @@ call the API.
 | `lobby.json` | CAVIAR lobby, real video | 3 cameras: an urgent "Possible exit obstruction" alert at 42.8 s, "Possible unattended bag" alerts at 28.2 s and 30.1 s. People walking through never alert. | Nothing: runs today, no detector, no Gemini key |
 | `venue.json` | Pexels | Clear tote passes; a shoulder-mounted video camera gets a review alert; phones don't count | Person 1's vision + Gemini key |
 | `construction.json` | Pexels | Hard-hat and hi-vis-vest checks on each person's crop | Person 1's vision + Gemini key |
-| `site_safety.json` | Pexels, looping | The live policy demo (`/#/demo`): type a policy, it applies to both cameras at once, each person gets gear labels | Nothing: recorded tracks + cached verdicts (Gemini only compiles, with an offline fallback) |
+| `site_safety.json` | WILDTRACK plaza (camera 3), looping | The live policy demo (`/#/demo`): type a policy and it applies at once; "No backpacks or bags." flags every bag in view | Tracks in `clips/demo/` (see below); gear rules need Gemini |
 | `tracking.json` | Pexels | A busy lobby: many anonymous person tracks, zero false bag alerts | Person 1's vision |
 
 Before the scenes needing vision can run, Person 1's `person1/vision` must be merged and its
@@ -51,8 +51,14 @@ cameras (`PUT /api/policy` is allowed while monitoring); the videos keep playing
   A looping camera alerts once per rule and track for each applied policy, not on every loop.
 - Each camera has one whole-frame zone, so there are no zones to draw or name: every rule covers every
   camera, alerts don't mention a zone, and the stream draws no zone outline.
-- Gear checks come from `cached_verdicts` (`ppe_verdicts.json`, real Gemini answers keyed by clip, track
-  id and check) before any live call. If you change a clip or its tracks, check that every track that can
+- The plaza clip is `clips/demo/wildtrack_cam3.mp4`: the WILDTRACK trim scaled to 1280x720 (the size the
+  detector uses anyway; the 2.9K original was too heavy to decode live), with tracks from
+  `python -m vision.dump` (about 25 min on CPU; ~19 people per frame, ~64 bags over 1 s).
+- Gear checks on the plaza go to Gemini live, once per person: a looping camera remembers each track's
+  answer, so later loops don't ask again. With ~285 people a gear policy still means hundreds of calls on
+  the first loop (2 per second; the rest show "unclear"). Bag bans need no Gemini at all.
+- Scenes can name `cached_verdicts` (`ppe_verdicts.json`, real Gemini answers keyed by clip, track
+  id and check), used before any live call. If you change a clip or its tracks, check that every track that can
   reach the 1 s threshold is cached: the engine bridges detection gaps of up to 1 s, so a track with only
   9 frames spread over more than a second still gets verified (construction track 26 did). Missing ones
   go to live Gemini, or become "Manual review needed" offline.

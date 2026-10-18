@@ -157,20 +157,21 @@ class SceneTests(unittest.TestCase):
 
 
 class SiteSafetySceneTests(unittest.TestCase):
-    def test_scene_loops_two_whole_frame_cameras_with_cached_verdicts(self):
-        from app.verdicts import CachedVerdicts
+    def test_scene_loops_one_whole_frame_camera(self):
         from policy.capability import whole_frame_cameras
         scene = read_scene(ROOT / 'demo' / 'scenes' / 'site_safety.json')
-        self.assertEqual([c.source.split(':', 1)[0] for c in scene.cameras], ['loop', 'loop'])
+        self.assertEqual([c.source.split(':', 1)[0] for c in scene.cameras], ['loop'])
         self.assertTrue(whole_frame_cameras(scene.zones))
         self.assertEqual(scene.rules, [])
-        cached = CachedVerdicts.load(Path(scene.cached_verdicts.file), scene.cached_verdicts.cameras)
-        hat = cached.get('cam_site', 19, 'hard_hat')
-        self.assertIs(hat.answer, False)
+        self.assertIsNone(scene.cached_verdicts)  # plaza checks go to the live verifier
+
+    def test_cached_verdicts_answer_by_clip_track_and_check(self):
+        from app.verdicts import CachedVerdicts
+        cached = CachedVerdicts.load(ROOT / 'demo' / 'ppe_verdicts.json', {'cam_site': 'construction_site'})
+        self.assertIs(cached.get('cam_site', 19, 'hard_hat').answer, False)
         self.assertIs(cached.get('cam_site', 1, 'safety_vest').answer, True)
-        self.assertIsNone(cached.get('cam_site', 999, 'hard_hat'))  # unknown: ask the live verifier
+        self.assertIs(cached.get('cam_site', 26, 'hard_hat').answer, True)  # short track the engine still checks
         self.assertIsNone(cached.lookup('cam_other'))
-        self.assertIs(cached.lookup('cam_warehouse')(10, 'hard_hat').answer, False)
 
 
 class EvidenceSizeTests(unittest.TestCase):

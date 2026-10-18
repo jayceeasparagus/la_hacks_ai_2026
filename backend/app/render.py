@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from app.models import Rule, RuleState, TrackFrame, Verdict, Zone
+from engine.alerts import is_prohibition
 from engine.zones import is_whole_frame
 
 WIDTH, HEIGHT = 960, 540
@@ -134,9 +135,16 @@ def annotate(image: np.ndarray, zones: list[Zone], tf: TrackFrame | None,
         for row, (text, outcome) in enumerate(checks.values()):
             _label(out, text, p1[0], top + 20 * (row + 1), CHECK_COLOR[outcome])
         for row, state in enumerate(timers):
-            name = rules[state.rule_id].name if state.rule_id in rules else state.rule_id
-            text = (f'{name} {state.elapsed_seconds:.1f}/{state.duration_seconds:g}s'
-                    f' {state.phase}')
+            rule = rules.get(state.rule_id)
+            if rule is not None and is_prohibition(rule):
+                # "No bags": the object being in view is the finding, so no timer readout.
+                if state.phase != 'alerted':
+                    continue
+                text = f'{track.object_class.capitalize()} in view'
+            else:
+                name = rule.name if rule is not None else state.rule_id
+                text = (f'{name} {state.elapsed_seconds:.1f}/{state.duration_seconds:g}s'
+                        f' {state.phase}')
             _label(out, text, p1[0], p2[1] + 20 * (row + 1), PHASE_COLOR[state.phase])
     return out
 

@@ -14,7 +14,7 @@ import type { Camera, CompileResult, Rule, RuleState, Zone } from '../types'
 import { useLive } from '../useLive'
 
 const EXAMPLES = [
-  'Workers at the construction site need to wear a vest and a helmet.',
+  'No backpacks or bags.',
   'Everyone must wear a hard hat.',
   'Hi-vis vests are required for everyone on the floor.',
 ]

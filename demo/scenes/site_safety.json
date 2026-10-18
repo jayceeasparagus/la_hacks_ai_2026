@@ -1,43 +1,25 @@
 {
-  "name": "Site safety: type a policy, watch it apply (Pexels footage)",
-  "description": "A construction site and a warehouse play on a loop as two cameras. Type a policy on the demo page and it applies to both at once: each person gets a box and their gear checks (hard hat, hi-vis vest). Each camera is judged as a whole frame, so there are no zones to draw. Gear verdicts come from demo/ppe_verdicts.json, so the demo works offline; PolicyLens never identifies who anyone is.",
-  "policy": "Workers at the construction site need to wear a vest and a helmet.",
+  "name": "Live policy demo: type a policy, watch it apply",
+  "description": "A busy plaza (WILDTRACK camera 3) plays on a loop as the demo camera. Type a policy on the demo page and it applies at once: each person gets a box and, for gear rules, their checks (hard hat, hi-vis vest); bag bans flag any bag in view. The camera is judged as a whole frame, so there are no zones to draw. Gear checks go to Gemini live, once per person. PolicyLens never identifies who anyone is.",
+  "policy": "No backpacks or bags.",
   "cameras": [
     {
-      "id": "cam_site",
-      "name": "Construction site",
-      "source": "loop:../../clips/pexels/construction_workers_5434220.tracks.jsonl@../../clips/pexels/construction_workers_5434220.mp4"
-    },
-    {
-      "id": "cam_warehouse",
-      "name": "Warehouse",
-      "source": "loop:../../clips/pexels/warehouse_4281236.tracks.jsonl@../../clips/pexels/warehouse_4281236.mp4"
+      "id": "cam_plaza",
+      "name": "Plaza",
+      "source": "loop:../../clips/demo/wildtrack_cam3.tracks.jsonl@../../clips/demo/wildtrack_cam3.mp4"
     }
   ],
   "zones": [
     {
-      "id": "site_frame",
-      "camera_id": "cam_site",
-      "name": "Construction site",
-      "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]
-    },
-    {
-      "id": "warehouse_frame",
-      "camera_id": "cam_warehouse",
-      "name": "Warehouse",
+      "id": "plaza_frame",
+      "camera_id": "cam_plaza",
+      "name": "Plaza",
       "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]
     }
   ],
   "rules": [],
-  "cached_verdicts": {
-    "file": "../ppe_verdicts.json",
-    "cameras": {
-      "cam_site": "construction_site",
-      "cam_warehouse": "warehouse"
-    }
-  },
   "needs": [],
   "credits": [
-    "Pexels videos 5434220, 4281236 (Pexels License, free to use)"
+    "WILDTRACK dataset, camera 3, trimmed (EPFL CVLab)"
   ]
 }
